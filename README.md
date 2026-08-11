@@ -3089,3 +3089,2587 @@ Client -> Load Balancer -> [Stateless Node instances] -> Cache (Redis) -> DB (+ 
 Tip: don't just memorize the answers — pick 10–15 questions per section and actually type out the code snippets yourself. That's what makes it stick under interview pressure.
 
 *Total: 301 questions (Basic → Super Advanced), each with an explanation and a code snippet.*
+
+
+
+
+
+
+
+
+
+# 500 Must-Know Interview Questions — MongoDB, SQL & Database Concepts/Schema Design
+
+**How to use this guide:** Every question is answered in plain, simple language first, followed by a working code snippet where it applies. Questions move from **Basic → Intermediate → Advanced → Super-Advanced** in each section, so you can either read start-to-finish to build up your knowledge, or jump straight to the level you're being interviewed at. This is built to prep you for real company interviews — from startup screening rounds to FAANG-style system design rounds.
+
+---
+
+## Table of Contents
+
+1. **[Part 1: MongoDB — 200 Questions](#part-1-mongodb)**
+   - 1.1 Basic (Q1–Q50)
+   - 1.2 Intermediate (Q51–Q100)
+   - 1.3 Advanced (Q101–Q150)
+   - 1.4 Super-Advanced (Q151–Q200)
+2. **[Part 2: SQL — 200 Questions](#part-2-sql)**
+   - 2.1 Basic (Q1–Q50)
+   - 2.2 Intermediate (Q51–Q100)
+   - 2.3 Advanced (Q101–Q150)
+   - 2.4 Super-Advanced (Q151–Q200)
+3. **[Part 3: Database Concepts & Schema Design — 100 Questions](#part-3-db-concepts)**
+   - 3.1 Basic (Q1–Q25)
+   - 3.2 Intermediate (Q26–Q50)
+   - 3.3 Advanced (Q51–Q75)
+   - 3.4 Super-Advanced (Q76–Q100)
+
+---
+
+<a id="part-1-mongodb"></a>
+# PART 1: MongoDB — 200 Questions
+
+## 1.1 Basic (Q1–Q50)
+
+### Q1. What is MongoDB and how is it different from a traditional relational database?
+**Answer:** MongoDB is a NoSQL, document-oriented database. Instead of storing data in rows and tables like MySQL or PostgreSQL, it stores data as JSON-like documents called BSON inside "collections." There's no fixed schema, so different documents in the same collection can have different fields. This makes MongoDB flexible for fast-changing applications, while relational databases enforce a strict, predefined structure.
+```javascript
+// A MongoDB document (like one "row")
+{
+  _id: ObjectId("64f1a2b3c4d5e6f7a8b9c0d1"),
+  name: "Aknandan",
+  role: "SDE-1",
+  skills: ["Node.js", "MongoDB", "React"]
+}
+```
+
+### Q2. What is a document in MongoDB?
+**Answer:** A document is the basic unit of data in MongoDB — a set of key-value pairs, similar to a JSON object, stored internally as BSON (Binary JSON). It's equivalent to a "row" in SQL, but far more flexible because it can hold nested objects and arrays.
+```javascript
+{
+  name: "John",
+  age: 28,
+  address: { city: "Kolkata", pin: "700001" }
+}
+```
+
+### Q3. What is a collection?
+**Answer:** A collection is a group of MongoDB documents, similar to a "table" in SQL. Unlike a SQL table, a collection does not enforce that every document have the same fields or types.
+```javascript
+db.createCollection("users")
+```
+
+### Q4. What is BSON and why does MongoDB use it instead of plain JSON?
+**Answer:** BSON stands for Binary JSON. It's a binary-encoded version of JSON that MongoDB uses to store documents on disk. BSON adds extra data types that JSON doesn't have natively — like `Date`, `ObjectId`, and binary data — and it's faster to parse and more space-efficient than text-based JSON.
+```javascript
+// JSON only has strings/numbers/booleans/arrays/objects/null
+// BSON adds: Date, ObjectId, Int32, Int64, Decimal128, Binary, etc.
+```
+
+### Q5. What is `_id` in MongoDB?
+**Answer:** Every document must have a unique `_id` field, which acts as its primary key. If you don't provide one, MongoDB automatically generates a 12-byte `ObjectId` for it. This field is indexed by default, so lookups by `_id` are very fast.
+```javascript
+db.users.insertOne({ name: "Riya" })
+// _id: ObjectId("...") gets added automatically
+```
+
+### Q6. How do you insert a single document?
+**Answer:** Use `insertOne()`, passing a JavaScript object representing the document. MongoDB returns an acknowledgment with the generated `_id`.
+```javascript
+db.users.insertOne({ name: "Aman", age: 25, city: "Delhi" })
+```
+
+### Q7. How do you insert multiple documents at once?
+**Answer:** Use `insertMany()` with an array of documents. This is more efficient than calling `insertOne()` in a loop because it's a single round trip to the database.
+```javascript
+db.users.insertMany([
+  { name: "A", age: 20 },
+  { name: "B", age: 22 }
+])
+```
+
+### Q8. How do you find documents in a collection?
+**Answer:** `find()` returns a cursor over all matching documents; pass an empty object `{}` to get everything. `findOne()` returns just the first matching document as an object, not a cursor.
+```javascript
+db.users.find({ city: "Delhi" })      // cursor of all matches
+db.users.findOne({ name: "Aman" })    // single document
+```
+
+### Q9. How do query filters work in MongoDB's `find()`?
+**Answer:** The first argument to `find()` is a filter object. MongoDB compares each document's fields against the filter — by default it's an exact match, but you can use special "query operators" (starting with `$`) for ranges, comparisons, and more.
+```javascript
+db.users.find({ age: 25 })                 // exact match
+db.users.find({ age: { $gt: 25 } })         // age > 25
+```
+
+### Q10. What are comparison query operators? Name a few.
+**Answer:** These are special keys used inside a filter to compare field values instead of checking exact equality: `$eq` (equal), `$ne` (not equal), `$gt`/`$gte` (greater than / or equal), `$lt`/`$lte` (less than / or equal), and `$in`/`$nin` (value is/isn't in a list).
+```javascript
+db.products.find({ price: { $gte: 100, $lte: 500 } })
+db.products.find({ category: { $in: ["books", "toys"] } })
+```
+
+### Q11. How do `$and` and `$or` work?
+**Answer:** `$and` requires all listed conditions to be true; `$or` requires at least one. Note that placing two conditions on different fields directly inside one object is already an implicit AND — you only need `$and` for more complex nested cases, like combining multiple conditions on the same field.
+```javascript
+db.users.find({ $or: [ { age: { $lt: 18 } }, { age: { $gt: 60 } } ] })
+db.users.find({ $and: [ { age: { $gt: 18 } }, { age: { $lt: 30 } } ] })
+```
+
+### Q12. How do you update a single document?
+**Answer:** `updateOne()` finds the first document matching a filter and applies update operators to it (like `$set` to change fields). You should almost always use update operators rather than passing a raw replacement object, so you don't accidentally wipe out other fields.
+```javascript
+db.users.updateOne(
+  { name: "Aman" },
+  { $set: { city: "Mumbai" } }
+)
+```
+
+### Q13. How do you update many documents at once?
+**Answer:** `updateMany()` applies the same update to every document matching the filter, which is useful for bulk changes like marking every "pending" order as "shipped."
+```javascript
+db.orders.updateMany(
+  { status: "pending" },
+  { $set: { status: "shipped" } }
+)
+```
+
+### Q14. What does the `$inc` update operator do?
+**Answer:** `$inc` increases (or decreases, with a negative number) a numeric field by a given amount, without you needing to read the current value first. This avoids race conditions compared to reading, adding in your app, then writing back.
+```javascript
+db.products.updateOne({ _id: id }, { $inc: { stock: -1 } })
+```
+
+### Q15. What do `$push` and `$pull` do?
+**Answer:** `$push` adds a value to the end of an array field; `$pull` removes all instances of a matching value from an array field.
+```javascript
+db.users.updateOne({ _id: id }, { $push: { tags: "vip" } })
+db.users.updateOne({ _id: id }, { $pull: { tags: "vip" } })
+```
+
+### Q16. How do you delete documents?
+**Answer:** `deleteOne()` removes the first document matching the filter; `deleteMany()` removes every matching document. Passing `{}` to `deleteMany()` empties the whole collection (its documents, not the collection itself).
+```javascript
+db.users.deleteOne({ name: "Aman" })
+db.users.deleteMany({ status: "inactive" })
+```
+
+### Q17. What is projection in MongoDB?
+**Answer:** Projection is the second argument to `find()` that controls which fields are returned, so you don't pull back data you don't need. Set a field to `1` to include it, or `0` to exclude it (you can't mix inclusion and exclusion, except for `_id`).
+```javascript
+db.users.find({}, { name: 1, city: 1, _id: 0 })
+```
+
+### Q18. How do you sort, limit, and skip results?
+**Answer:** `.sort()` orders results (`1` ascending, `-1` descending), `.limit()` caps how many documents come back, and `.skip()` skips over a number of documents — commonly combined for pagination.
+```javascript
+db.users.find().sort({ age: -1 }).skip(10).limit(10)
+```
+
+### Q19. What is an index, and why is it useful?
+**Answer:** An index is a special data structure (usually a B-tree) that MongoDB maintains to make lookups on a field fast, similar to an index in the back of a book. Without an index, MongoDB has to scan every document ("collection scan") to find matches, which is slow on large collections.
+```javascript
+db.users.createIndex({ email: 1 })
+```
+
+### Q20. What is a unique index?
+**Answer:** A unique index guarantees that no two documents can have the same value for the indexed field(s), and MongoDB will throw a duplicate key error if you try to insert a duplicate. It's commonly used on fields like `email` or `username`.
+```javascript
+db.users.createIndex({ email: 1 }, { unique: true })
+```
+
+### Q21. Is MongoDB schema-less? What does that mean in practice?
+**Answer:** MongoDB is often called "schema-less" because collections don't enforce that every document has the same fields or types. In practice this gives flexibility, but most real applications still enforce structure at the application layer (e.g., with Mongoose schemas) so data stays consistent.
+```javascript
+// Both are valid in the same "users" collection
+{ name: "A" }
+{ name: "B", age: 30, extra: { nested: true } }
+```
+
+### Q22. What's the difference between embedding and referencing documents?
+**Answer:** Embedding stores related data directly inside the parent document (like putting a user's address inside the user document) — fast to read, since it's one query. Referencing stores just an `_id` and requires a second query (or `$lookup`) to fetch the related document — better when the related data is large, shared, or changes independently.
+```javascript
+// Embedded
+{ name: "A", address: { city: "Kolkata" } }
+// Referenced
+{ name: "A", addressId: ObjectId("...") }
+```
+
+### Q23. How do arrays work inside documents, and how do you query them?
+**Answer:** A field can hold an array of values or sub-documents. To check if an array contains a value, you query the field directly; MongoDB automatically checks if any array element matches.
+```javascript
+db.users.insertOne({ name: "A", tags: ["admin", "vip"] })
+db.users.find({ tags: "vip" })   // matches because array contains "vip"
+```
+
+### Q24. What is dot notation used for?
+**Answer:** Dot notation lets you reach into nested objects or specific array indexes when querying or updating, using a string like `"address.city"`.
+```javascript
+db.users.find({ "address.city": "Kolkata" })
+db.users.updateOne({ _id: id }, { $set: { "address.pin": "700002" } })
+```
+
+### Q25. What does "upsert" mean?
+**Answer:** Upsert = "update or insert." When you pass `{ upsert: true }` to an update, MongoDB updates the document if it finds a match, or inserts a brand-new document (using the filter + update fields) if it doesn't. It's handy for "create if not exists" logic.
+```javascript
+db.counters.updateOne(
+  { name: "orders" },
+  { $inc: { seq: 1 } },
+  { upsert: true }
+)
+```
+
+### Q26. What is the structure of an ObjectId?
+**Answer:** An `ObjectId` is a 12-byte value: 4 bytes for a timestamp (seconds since epoch), 5 bytes of a random value unique to the machine/process, and 3 bytes as an incrementing counter. Because it starts with a timestamp, ObjectIds are roughly sortable by creation time.
+```javascript
+ObjectId("64f1a2b3c4d5e6f7a8b9c0d1")
+// .getTimestamp() extracts the creation time
+```
+
+### Q27. How do you count documents in a collection?
+**Answer:** `countDocuments()` runs an actual query and gives an accurate count, including any filter you pass. It's preferred over the older `count()` method, which is deprecated on collections.
+```javascript
+db.users.countDocuments({ city: "Delhi" })
+```
+
+### Q28. What does `distinct()` do?
+**Answer:** `distinct()` returns all the unique values for a given field across matching documents, similar to `SELECT DISTINCT` in SQL.
+```javascript
+db.users.distinct("city")
+```
+
+### Q29. How do you check if a field exists?
+**Answer:** The `$exists` operator checks whether a field is present (or absent) in a document, regardless of its value.
+```javascript
+db.users.find({ phone: { $exists: true } })
+db.users.find({ phone: { $exists: false } })
+```
+
+### Q30. How do you do a regex/pattern search in MongoDB?
+**Answer:** You can pass a regular expression directly as the value for a field, and MongoDB matches it like a "LIKE" query in SQL. It's useful for partial text matches like search-as-you-type, though on large collections a text index is faster than a raw regex scan.
+```javascript
+db.users.find({ name: /^Am/ })          // starts with "Am"
+db.users.find({ name: { $regex: "an", $options: "i" } })  // case-insensitive
+```
+
+### Q31. How does MongoDB handle `null` vs a missing field?
+**Answer:** Querying `{ field: null }` matches documents where the field is explicitly set to `null` **and** documents where the field is missing entirely — which surprises a lot of people. Use `$exists` in combination if you need to tell these apart.
+```javascript
+db.users.find({ phone: null }) // matches phone: null AND missing phone field
+```
+
+### Q32. What is a capped collection?
+**Answer:** A capped collection has a fixed size; once it's full, MongoDB automatically overwrites the oldest documents with new ones, keeping insertion order. They're useful for logs or caches where you only care about recent data.
+```javascript
+db.createCollection("logs", { capped: true, size: 5242880, max: 1000 })
+```
+
+### Q33. What is GridFS?
+**Answer:** GridFS is a MongoDB specification for storing files larger than the 16MB document size limit (like videos or large images). It splits a file into small chunks stored in one collection, with file metadata in another.
+```javascript
+// via mongofiles CLI
+mongofiles put myvideo.mp4
+```
+
+### Q34. What are `mongodump` and `mongorestore`?
+**Answer:** `mongodump` creates a binary (BSON) backup of a database or collection; `mongorestore` loads that backup back into a MongoDB instance. They're the standard tools for backups and migrating data between servers.
+```bash
+mongodump --db=shop --out=/backups/
+mongorestore --db=shop /backups/shop
+```
+
+### Q35. What are `mongoimport` and `mongoexport`?
+**Answer:** These tools move data in and out of MongoDB using text formats like JSON or CSV, which is handy for loading sample data or exporting a report — unlike `mongodump`/`mongorestore`, which use MongoDB's own binary format.
+```bash
+mongoimport --db=shop --collection=users --file=users.json
+mongoexport --db=shop --collection=users --out=users.json
+```
+
+### Q36. What is a replica set, in simple terms?
+**Answer:** A replica set is a group of MongoDB servers that all hold the same data. One server is the "primary" that accepts writes, and the others are "secondaries" that copy data from it. If the primary goes down, a secondary is automatically elected to take over — giving you high availability.
+```javascript
+rs.status()   // check replica set health from the mongo shell
+```
+
+### Q37. What is sharding, in simple terms?
+**Answer:** Sharding is how MongoDB scales horizontally: it splits one large collection across multiple servers ("shards") based on a shard key, so no single machine has to hold or serve all the data. It's used when a dataset grows too big or too busy for one server to handle.
+```javascript
+sh.shardCollection("shop.orders", { customerId: 1 })
+```
+
+### Q38. What is the aggregation framework, briefly?
+**Answer:** Aggregation lets you process data through a "pipeline" of stages — filtering, grouping, reshaping, calculating — similar to `GROUP BY` and joins in SQL but expressed as a sequence of steps. The two most common stages are `$match` (filter) and `$group` (summarize).
+```javascript
+db.orders.aggregate([
+  { $match: { status: "completed" } },
+  { $group: { _id: "$customerId", total: { $sum: "$amount" } } }
+])
+```
+
+### Q39. What types of indexes does MongoDB support (name a few)?
+**Answer:** Besides the default single-field index, MongoDB supports: compound indexes (multiple fields), multikey indexes (automatically created on array fields), text indexes (for full-text search), geospatial indexes (for location queries), and hashed indexes (used for sharding).
+```javascript
+db.users.createIndex({ name: 1, age: -1 })   // compound
+db.articles.createIndex({ content: "text" }) // text index
+```
+
+### Q40. How does full-text search work in MongoDB?
+**Answer:** You create a text index on one or more string fields, then query with `$text` and `$search`. MongoDB tokenizes the text, ignores common "stop words," and can rank results by relevance score.
+```javascript
+db.articles.createIndex({ title: "text", body: "text" })
+db.articles.find({ $text: { $search: "mongodb indexing" } })
+```
+
+### Q41. What is schema validation in MongoDB?
+**Answer:** Even though MongoDB doesn't require a schema, you can attach a `$jsonSchema` validator to a collection to enforce rules — required fields, data types, allowed values — so bad data gets rejected at the database level, not just in your app code.
+```javascript
+db.createCollection("users", {
+  validator: {
+    $jsonSchema: {
+      required: ["name", "email"],
+      properties: {
+        email: { bsonType: "string" }
+      }
+    }
+  }
+})
+```
+
+### Q42. How do you automatically add "created at" / "updated at" timestamps?
+**Answer:** With the native driver, you typically set `createdAt`/`updatedAt` manually in your app logic on insert/update. If you use an ODM like Mongoose, passing `{ timestamps: true }` in the schema does this automatically for you.
+```javascript
+// Mongoose
+const schema = new mongoose.Schema({ name: String }, { timestamps: true });
+```
+
+### Q43. What is a MongoDB connection string (URI)?
+**Answer:** It's the URL used to connect an application to a MongoDB server or cluster, containing the host, port, credentials, and database name/options. For MongoDB Atlas (cloud-hosted), it uses the `mongodb+srv://` format for automatic server discovery.
+```
+mongodb+srv://user:password@cluster0.mongodb.net/shopDB?retryWrites=true&w=majority
+```
+
+### Q44. How do you connect to MongoDB from a Node.js app using the native driver?
+**Answer:** You create a `MongoClient`, call `connect()`, then get a handle to your database and collection to run operations on.
+```javascript
+const { MongoClient } = require("mongodb");
+const client = new MongoClient(uri);
+await client.connect();
+const db = client.db("shopDB");
+const users = db.collection("users");
+```
+
+### Q45. What is Mongoose, and why do people use it with MongoDB?
+**Answer:** Mongoose is an Object Data Modeling (ODM) library for Node.js that sits on top of the native driver. It lets you define schemas with types and validation, adds convenient query-building syntax, and supports features like middleware ("hooks") and virtuals — bringing some of the structure of SQL back to MongoDB, by choice.
+```javascript
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  age: Number
+});
+const User = mongoose.model("User", userSchema);
+```
+
+### Q46. How do you rename a collection or drop it?
+**Answer:** `renameCollection()` changes a collection's name; `drop()` deletes the entire collection along with its indexes.
+```javascript
+db.oldUsers.renameCollection("users")
+db.tempData.drop()
+```
+
+### Q47. What is the difference between `find()` and `findOne()` in terms of return type?
+**Answer:** `find()` returns a **cursor** — a pointer you iterate over lazily to get documents one batch at a time — while `findOne()` immediately returns a **single document object** (or `null` if nothing matches).
+```javascript
+const cursor = db.users.find({});
+await cursor.forEach(doc => console.log(doc));
+
+const one = await db.users.findOne({ name: "A" }); // object or null
+```
+
+### Q48. What is the maximum size of a single BSON document?
+**Answer:** A single document is limited to 16MB. This keeps a single document from hogging memory/network bandwidth during transfer; if you need to store something bigger (like a video file), you use GridFS, which chunks it across multiple documents.
+
+### Q49. How do you check the size and stats of a collection?
+**Answer:** `db.collection.stats()` gives details like document count, average document size, storage size, and index sizes, which is useful for diagnosing performance and storage issues.
+```javascript
+db.users.stats()
+```
+
+### Q50. What is MongoDB Atlas?
+**Answer:** MongoDB Atlas is MongoDB's official fully-managed, cloud-hosted database service. It handles provisioning, backups, scaling, monitoring, and security patching for you, and is available on AWS, Azure, and GCP — most companies today use Atlas rather than self-hosting MongoDB.
+
+## 1.2 Intermediate (Q51–Q100)
+
+### Q51. What does the `$project` stage do in aggregation?
+**Answer:** `$project` reshapes each document — choosing which fields to keep, drop, rename, or compute new fields from existing ones. It's the aggregation equivalent of the projection argument in `find()`, but far more powerful because you can also transform values.
+```javascript
+db.orders.aggregate([
+  { $project: { customer: 1, total: { $multiply: ["$price", "$qty"] } } }
+])
+```
+
+### Q52. What does `$unwind` do, and when do you need it?
+**Answer:** `$unwind` takes a document with an array field and outputs one separate document per array element — flattening it. You need it when you want to group or filter based on individual array items rather than the array as a whole.
+```javascript
+// { _id: 1, items: ["pen", "book"] }  -->  becomes 2 documents
+db.orders.aggregate([{ $unwind: "$items" }])
+```
+
+### Q53. How does `$lookup` work, and what SQL concept is it similar to?
+**Answer:** `$lookup` performs a left outer join between two collections, pulling in matching documents from a "foreign" collection into an array field on the local documents. It's MongoDB's equivalent of a SQL `JOIN`.
+```javascript
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "customers",
+      localField: "customerId",
+      foreignField: "_id",
+      as: "customerInfo"
+    }
+  }
+])
+```
+
+### Q54. What is `$addFields` and how is it different from `$project`?
+**Answer:** `$addFields` adds new computed fields to a document while keeping all existing fields intact. `$project` requires you to explicitly list every field you want to keep — so `$addFields` is more convenient when you just want to add one or two fields without rewriting the whole document shape.
+```javascript
+db.orders.aggregate([
+  { $addFields: { total: { $multiply: ["$price", "$qty"] } } }
+])
+```
+
+### Q55. What does the `$facet` stage do?
+**Answer:** `$facet` lets you run multiple independent aggregation pipelines on the same input documents in a single query, returning all results together — useful for things like getting a paginated page of results **and** a total count in one round trip.
+```javascript
+db.products.aggregate([
+  { $facet: {
+      data: [{ $skip: 0 }, { $limit: 10 }],
+      totalCount: [{ $count: "count" }]
+  }}
+])
+```
+
+### Q56. What does `explain()` tell you about a query?
+**Answer:** `explain()` shows MongoDB's query execution plan — whether it used an index (`IXSCAN`) or scanned the whole collection (`COLLSCAN`), how many documents it examined vs. returned, and how long it took. It's the main tool for diagnosing slow queries.
+```javascript
+db.users.find({ email: "a@x.com" }).explain("executionStats")
+```
+
+### Q57. Why does the order of fields matter in a compound index?
+**Answer:** MongoDB can only use a compound index efficiently for queries that use a "prefix" of its fields in order. An index on `{ a: 1, b: 1 }` speeds up queries filtering on `a` alone, or on `a` and `b` together, but **not** a query that filters on `b` alone — that would require a separate index.
+```javascript
+db.users.createIndex({ country: 1, city: 1 })
+// Fast: find({country: "IN"})  and find({country:"IN", city:"Kolkata"})
+// NOT sped up: find({city: "Kolkata"}) alone
+```
+
+### Q58. What is a covered query?
+**Answer:** A covered query is one where every field requested (in both the filter and the projection) exists in an index — so MongoDB can answer the query using only the index, without ever touching the actual documents. This is significantly faster because it avoids extra disk/memory reads.
+```javascript
+db.users.createIndex({ email: 1, name: 1 })
+db.users.find({ email: "a@x.com" }, { name: 1, email: 1, _id: 0 }) // covered
+```
+
+### Q59. What is a multi-document transaction in MongoDB, and when did it become available?
+**Answer:** A transaction lets you group multiple read/write operations — potentially across different documents or collections — so they either all succeed or all fail together (ACID guarantees), just like a SQL transaction. MongoDB added multi-document transaction support starting with version 4.0 for replica sets, and 4.2 for sharded clusters.
+```javascript
+const session = client.startSession();
+session.startTransaction();
+try {
+  await accounts.updateOne({ _id: a }, { $inc: { balance: -100 } }, { session });
+  await accounts.updateOne({ _id: b }, { $inc: { balance: 100 } }, { session });
+  await session.commitTransaction();
+} catch (e) {
+  await session.abortTransaction();
+}
+```
+
+### Q60. What is a "session" in MongoDB and why do transactions need one?
+**Answer:** A client session (`ClientSession`) tracks a logical sequence of related operations sent to the server. Transactions are always tied to a session because MongoDB needs a way to group your operations together and know when to commit or roll them all back.
+
+### Q61. What is write concern?
+**Answer:** Write concern controls how many replica set members must confirm a write before MongoDB reports it as successful. `w: 1` (default) only waits for the primary; `w: "majority"` waits for most replica members, giving stronger durability at the cost of some latency.
+```javascript
+db.orders.insertOne({ item: "pen" }, { writeConcern: { w: "majority" } })
+```
+
+### Q62. What is read concern?
+**Answer:** Read concern controls how "safe" or up-to-date the data returned by a read must be. `"local"` (default) returns whatever the node currently has; `"majority"` only returns data that's been replicated to a majority of nodes, guaranteeing it won't be rolled back later.
+```javascript
+db.orders.find().readConcern("majority")
+```
+
+### Q63. What is the oplog?
+**Answer:** The oplog (operations log) is a special capped collection on the primary that records every write operation in order. Secondary members continuously read the oplog and replay those operations to stay in sync — it's the backbone of MongoDB replication.
+
+### Q64. What is replication lag?
+**Answer:** Replication lag is the delay between a write happening on the primary and that same write being applied on a secondary. If lag is high (due to network issues or a slow secondary), reads from that secondary may return stale data.
+
+### Q65. What is `bulkWrite()` used for?
+**Answer:** `bulkWrite()` lets you send a mix of insert, update, and delete operations to MongoDB in a single network round trip, which is much more efficient than issuing them one at a time in a loop.
+```javascript
+db.users.bulkWrite([
+  { insertOne: { document: { name: "A" } } },
+  { updateOne: { filter: { name: "B" }, update: { $set: { age: 30 } } } },
+  { deleteOne: { filter: { name: "C" } } }
+])
+```
+
+### Q66. What does `findOneAndUpdate()` do differently from `updateOne()`?
+**Answer:** `findOneAndUpdate()` updates a document **and** returns it in the same atomic operation — you can choose to get the document as it was before (`before`, default) or after (`after`) the update. `updateOne()` only returns metadata (like how many documents matched/modified), not the document itself.
+```javascript
+db.counters.findOneAndUpdate(
+  { name: "orders" },
+  { $inc: { seq: 1 } },
+  { returnDocument: "after" }
+)
+```
+
+### Q67. What is `arrayFilters` used for in an update?
+**Answer:** `arrayFilters` lets you target and update specific elements within an array field that match a condition, instead of updating the whole array or only the first matching element.
+```javascript
+db.students.updateOne(
+  { _id: id },
+  { $set: { "grades.$[elem].score": 90 } },
+  { arrayFilters: [{ "elem.subject": "Math" }] }
+)
+```
+
+### Q68. What does `$elemMatch` do?
+**Answer:** `$elemMatch` matches documents where **at least one element** in an array satisfies multiple conditions at once. Without it, MongoDB might match a document even if the conditions are spread across different array elements rather than one element satisfying all of them.
+```javascript
+db.students.find({
+  scores: { $elemMatch: { subject: "Math", score: { $gte: 80 } } }
+})
+```
+
+### Q69. What does the `$all` operator do?
+**Answer:** `$all` matches documents where an array field contains **all** of the specified values, in any order — different from a plain array match, which would need an exact full match.
+```javascript
+db.posts.find({ tags: { $all: ["mongodb", "database"] } })
+```
+
+### Q70. What does `$size` do?
+**Answer:** `$size` matches documents where an array field has exactly the specified number of elements.
+```javascript
+db.posts.find({ tags: { $size: 3 } })
+```
+
+### Q71. What is a TTL (Time-To-Live) index?
+**Answer:** A TTL index automatically deletes documents from a collection after a certain amount of time has passed since a date stored in a specified field — perfect for session data, temporary tokens, or logs that should expire on their own.
+```javascript
+db.sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 })
+```
+
+### Q72. What is a partial index?
+**Answer:** A partial index only indexes documents that match a specified filter condition, rather than every document in the collection. This keeps the index smaller and faster when you only ever query a subset of documents (e.g., only "active" users).
+```javascript
+db.users.createIndex(
+  { email: 1 },
+  { partialFilterExpression: { status: "active" } }
+)
+```
+
+### Q73. What is a sparse index?
+**Answer:** A sparse index only includes documents that actually have the indexed field, skipping documents where it's missing. This is useful for optional fields, since it keeps the index smaller than indexing every document (including ones with the field absent).
+```javascript
+db.users.createIndex({ phone: 1 }, { sparse: true })
+```
+
+### Q74. What does building an index in the background mean?
+**Answer:** By default (since MongoDB 4.2), index builds are optimized to avoid fully blocking reads/writes on the collection for their entire duration, though they still take some resources. In older versions, you explicitly passed `{ background: true }` to avoid locking the whole collection while the index was built.
+
+### Q75. How do you interpret `COLLSCAN` vs `IXSCAN` in an explain plan?
+**Answer:** `COLLSCAN` means MongoDB scanned every document in the collection to find matches — slow on large collections and usually a sign you're missing an index. `IXSCAN` means it used an index to jump directly to matching documents — the goal for any performance-sensitive query.
+
+### Q76. What is `$graphLookup` used for?
+**Answer:** `$graphLookup` performs a recursive search within a collection, following references from document to document — useful for hierarchical data like an org chart (finding all reports under a manager) or a category tree.
+```javascript
+db.employees.aggregate([
+  { $graphLookup: {
+      from: "employees",
+      startWith: "$reportsTo",
+      connectFromField: "reportsTo",
+      connectToField: "_id",
+      as: "reportingChain"
+  }}
+])
+```
+
+### Q77. What are change streams?
+**Answer:** Change streams let your application subscribe to real-time notifications of data changes (inserts, updates, deletes) on a collection, database, or cluster — without needing to poll. They're built on the oplog and are commonly used for real-time dashboards, cache invalidation, or triggering downstream events.
+```javascript
+const changeStream = db.orders.watch();
+changeStream.on("change", (change) => console.log(change));
+```
+
+### Q78. What is `mongosh` and how is it different from the old `mongo` shell?
+**Answer:** `mongosh` is MongoDB's modern command-line shell, replacing the legacy `mongo` shell (deprecated). It adds better syntax highlighting, auto-completion, and improved error messages, while supporting the same JavaScript-based query syntax.
+
+### Q79. How do you check server status and database statistics?
+**Answer:** `db.serverStatus()` gives runtime metrics about the mongod process (connections, memory, operations counters); `db.stats()` gives storage-level statistics about a specific database (collection count, data size, index size).
+```javascript
+db.serverStatus()
+db.stats()
+```
+
+### Q80. How does user management and role-based access control work in MongoDB?
+**Answer:** You create users scoped to specific databases and assign them built-in or custom roles (like `read`, `readWrite`, `dbAdmin`) that define exactly what operations they're allowed to perform — following the principle of least privilege.
+```javascript
+db.createUser({
+  user: "appUser",
+  pwd: "strongPassword",
+  roles: [{ role: "readWrite", db: "shopDB" }]
+})
+```
+
+### Q81. What authentication mechanisms does MongoDB support?
+**Answer:** Common ones include SCRAM (username/password, the default), x.509 certificates (for client identity verification), and integrations like LDAP or Kerberos for enterprise deployments. Authentication is off by default on a fresh local install, so it must be explicitly enabled in production.
+
+### Q82. What is connection pooling and why does it matter?
+**Answer:** Rather than opening a new TCP connection to MongoDB for every request, drivers maintain a pool of reusable connections. This avoids the overhead of repeatedly establishing connections and keeps your app responsive under load. You usually configure `maxPoolSize` based on expected concurrency.
+```javascript
+const client = new MongoClient(uri, { maxPoolSize: 50 });
+```
+
+### Q83. When would you choose to use a custom string/UUID instead of the default ObjectId?
+**Answer:** You might use a UUID or custom string ID when you need IDs to be generated on the client-side before insertion (e.g., offline-first apps), need IDs compatible with another system, or want to avoid leaking creation-time information that ObjectIds embed.
+
+### Q84. What is denormalization, and why is it common in MongoDB schema design?
+**Answer:** Denormalization means duplicating some data across documents instead of only referencing it once, trading some data redundancy for fewer joins and faster reads. Since MongoDB doesn't have cheap joins like SQL, it's often better to embed a copy of frequently-read data (like a product name inside an order) rather than looking it up every time.
+
+### Q85. Explain the "one-to-few," "one-to-many," and "one-to-squillions" patterns.
+**Answer:** These describe how to model relationships based on scale: **one-to-few** (a user has a few addresses) → embed directly as an array. **one-to-many** (a product has thousands of reviews) → store reviews in their own collection, referencing the product's `_id`. **one-to-squillions** (a server logs millions of events) → store the "many" side in its own collection with a reference back to the "one" side, since embedding would blow past the 16MB document limit.
+
+### Q86. What is the "bucket pattern" in schema design?
+**Answer:** The bucket pattern groups many small, related documents (like IoT sensor readings every second) into fewer, larger documents grouped by time interval — e.g., one document per hour containing an array of readings. This reduces the total number of documents and index entries, improving performance for time-series-like data.
+```javascript
+{
+  sensorId: "s1",
+  hour: ISODate("2026-08-11T10:00:00Z"),
+  readings: [ { time: "...", value: 22.1 }, { time: "...", value: 22.3 } ]
+}
+```
+
+### Q87. What is the "subset pattern"?
+**Answer:** The subset pattern embeds only a small, frequently-accessed subset of related data (like the 5 most recent reviews) directly in the parent document for fast reads, while the full set lives in a separate collection for when you need everything.
+
+### Q88. What is the "computed pattern"?
+**Answer:** Instead of recalculating an expensive aggregate value (like a product's average rating) on every read, you compute it once — on write, or periodically — and store the result directly on the document. This trades a bit of write-time cost for much faster reads.
+
+### Q89. What does `$count` do in an aggregation pipeline?
+**Answer:** `$count` outputs a single document containing the count of documents that reached that stage of the pipeline — an aggregation-based alternative to `countDocuments()`.
+```javascript
+db.orders.aggregate([{ $match: { status: "paid" } }, { $count: "totalPaid" }])
+```
+
+### Q90. What does `$sort` combined with `$limit` let you build efficiently?
+**Answer:** Together they implement "top-N" queries — like "top 10 highest-paying customers" — and if there's a supporting index matching the sort field, MongoDB can avoid sorting all documents in memory and instead just walk the index in order.
+```javascript
+db.orders.aggregate([{ $sort: { amount: -1 } }, { $limit: 10 }])
+```
+
+### Q91. What is the difference between `$match` early vs. late in a pipeline, performance-wise?
+**Answer:** Putting `$match` as early as possible in the pipeline lets MongoDB filter out irrelevant documents (and potentially use an index) before doing expensive work like `$lookup` or `$group` — reducing the number of documents processed downstream.
+
+### Q92. What does `$merge` do in aggregation?
+**Answer:** `$merge` writes the results of an aggregation pipeline into a collection (the same one or a different one), supporting insert, merge, replace, or fail behavior on conflicts — useful for building materialized views/reports.
+```javascript
+db.orders.aggregate([
+  { $group: { _id: "$customerId", total: { $sum: "$amount" } } },
+  { $merge: { into: "customerTotals" } }
+])
+```
+
+### Q93. What is the difference between `$set`/`$unset` in updates versus `$project` excluding a field in a read query?
+**Answer:** `$set`/`$unset` in an update actually modify what's stored in the document. `$project` excluding a field in a `find()`/aggregation only affects what's returned in that query's output — the underlying document on disk is untouched.
+
+### Q94. How would you model a many-to-many relationship in MongoDB, e.g., students and courses?
+**Answer:** Common approaches: (1) store an array of course IDs on each student document (and/or an array of student IDs on each course), or (2) create a separate "enrollments" collection with `studentId` and `courseId` fields — closer to a SQL join table — which is better when the relationship itself has its own data (like enrollment date or grade).
+```javascript
+{ studentId: ObjectId("..."), courseId: ObjectId("..."), enrolledOn: ISODate("...") }
+```
+
+### Q95. What does "index intersection" mean?
+**Answer:** In some cases, MongoDB can use two separate single-field indexes together to satisfy a query that filters on both fields, instead of requiring one compound index. However, a well-chosen compound index is usually still more efficient than relying on index intersection.
+
+### Q96. What is the purpose of `hint()`?
+**Answer:** `hint()` forces MongoDB's query planner to use a specific index, overriding its own choice — useful for testing/debugging or in rare cases where the planner picks a suboptimal index.
+```javascript
+db.users.find({ city: "Delhi" }).hint({ city: 1 })
+```
+
+### Q97. What is a database profiler in MongoDB?
+**Answer:** The profiler logs details about database operations (queries, updates, etc.) that take longer than a set threshold, helping you find slow operations in production. You enable it with different verbosity levels.
+```javascript
+db.setProfilingLevel(1, { slowms: 100 }) // log ops slower than 100ms
+db.system.profile.find().sort({ ts: -1 })
+```
+
+### Q98. What's the difference between `deleteMany({})` and `drop()` on a collection?
+**Answer:** `deleteMany({})` removes all documents but keeps the collection (and its indexes) intact. `drop()` removes the collection entirely, including its indexes — which then need to be recreated if you rebuild the collection.
+
+### Q99. How do you rename a field across all documents in a collection?
+**Answer:** Use `updateMany()` with the `$rename` operator, which changes a field's key while keeping its value.
+```javascript
+db.users.updateMany({}, { $rename: { "oldName": "newName" } })
+```
+
+### Q100. What does `maxTimeMS()` do on a query?
+**Answer:** It sets a server-side time limit for how long a query is allowed to run before MongoDB automatically kills it — a safeguard against runaway queries consuming server resources.
+```javascript
+db.users.find({ city: "Delhi" }).maxTimeMS(5000)
+```
+
+## 1.3 Advanced (Q101–Q150)
+
+### Q101. What storage engine does MongoDB use by default, and what does it give you?
+**Answer:** MongoDB's default storage engine since version 3.2 is **WiredTiger**. It provides document-level concurrency control (so writes to different documents don't block each other), compression (reducing disk usage), and a checkpoint-based durability model that works alongside journaling.
+
+### Q102. How does journaling provide durability in MongoDB?
+**Answer:** WiredTiger writes changes to an on-disk journal before confirming them, and takes periodic checkpoints (snapshots of the data). If the server crashes between checkpoints, MongoDB replays the journal on restart to recover any writes that happened after the last checkpoint — preventing data loss.
+
+### Q103. What level of locking does WiredTiger use, and why does it matter?
+**Answer:** WiredTiger uses document-level concurrency control (via optimistic, MVCC-style concurrency), meaning two operations updating **different** documents in the same collection don't block each other. This is a major improvement over the old MMAPv1 engine, which locked at the collection level.
+
+### Q104. What is a shard key, and why is choosing it carefully so important?
+**Answer:** The shard key is the field (or fields) MongoDB uses to decide which shard a document belongs on. A poorly chosen shard key can lead to "hot shards" (one shard getting most of the traffic) or uneven data distribution, which defeats the purpose of sharding. A good shard key has high cardinality, even distribution, and matches your common query patterns.
+```javascript
+sh.shardCollection("shop.orders", { customerId: "hashed" })
+```
+
+### Q105. What is a "hot shard" and how does hashed sharding help avoid it?
+**Answer:** A hot shard happens when writes concentrate on one shard — commonly because a monotonically increasing key (like a timestamp or auto-incrementing ID) always maps new documents to the same shard/chunk. Hashed sharding applies a hash function to the shard key before distributing data, spreading writes evenly across shards even if the original key is sequential.
+
+### Q106. What is a chunk, and what does the balancer do?
+**Answer:** A chunk is a contiguous range of shard key values, MongoDB's unit of data movement in a sharded cluster. The balancer is a background process that monitors chunk distribution and automatically migrates chunks between shards to keep the data roughly evenly distributed.
+
+### Q107. What are config servers and `mongos`, and what do they each do?
+**Answer:** Config servers store the sharded cluster's metadata — which chunks live on which shards. `mongos` is a lightweight routing process that applications actually connect to; it consults the config servers to figure out which shard(s) to send a query to, so the app doesn't need to know about sharding internals.
+
+### Q108. How does a replica set election work?
+**Answer:** When the primary becomes unreachable, the remaining secondaries hold an election, and the one with the most up-to-date data (and highest configured priority) that can get a majority of votes becomes the new primary. This typically happens within seconds, minimizing write downtime.
+
+### Q109. What is a replica set "priority" and what is an "arbiter"?
+**Answer:** Priority is a configurable number that biases which member is more likely to be elected primary (higher priority = preferred). An arbiter is a special replica set member that votes in elections but holds no data — used to break ties and reach a majority in odd-numbered configurations without the cost of a full data-holding server.
+
+### Q110. What are the main read preference modes?
+**Answer:** `primary` (default — always read from primary, most consistent), `primaryPreferred`, `secondary` (spread read load, but risk stale data), `secondaryPreferred`, and `nearest` (lowest network latency, primary or secondary). Choosing the right mode balances consistency vs. read scalability.
+```javascript
+db.orders.find().readPref("secondaryPreferred")
+```
+
+### Q111. What is causal consistency in MongoDB?
+**Answer:** Causal consistency guarantees that within a single client session, operations are seen in the order they were issued — e.g., you'll never read stale data from before your own most recent write, even when reading from a secondary. It's enabled by using a `ClientSession`.
+
+### Q112. What are retryable writes?
+**Answer:** Retryable writes let the driver automatically retry a write operation once if it fails due to a transient network error or replica set failover, without risking duplicate writes — MongoDB uses a unique transaction ID to detect and ignore retried duplicates server-side.
+
+### Q113. Can transactions span multiple shards, and what's the trade-off?
+**Answer:** Yes, since MongoDB 4.2 distributed (cross-shard) transactions are supported, but they're more expensive than single-shard transactions because they require two-phase commit coordination across shards — so schema design that keeps related data on the same shard is still preferred where possible.
+
+### Q114. What's the difference between `$merge` and `$out` in aggregation?
+**Answer:** `$out` completely replaces the target collection with the pipeline's output (all-or-nothing). `$merge` is more flexible — it can insert, merge/update matching documents, or leave the target unchanged on conflict — making it better suited for incrementally updating materialized views.
+
+### Q115. How would you approach schema versioning as your application's data model evolves?
+**Answer:** Add a `schemaVersion` field to documents, and write your application code to handle multiple versions gracefully (either by migrating documents lazily on read/write, or running a background migration script). This avoids a risky, all-at-once migration on a live, large collection.
+```javascript
+{ schemaVersion: 2, name: "A", fullAddress: { ... } } // new shape
+{ schemaVersion: 1, name: "B", address: "..." }        // old shape, still valid
+```
+
+### Q116. How can you design a multi-tenant MongoDB schema?
+**Answer:** Common strategies: (1) a shared collection with a `tenantId` field on every document, indexed and always included in queries — simplest, works well for small-to-medium tenants; (2) a separate database per tenant — stronger isolation, easier per-tenant backup/limits, but more operational overhead; (3) a separate cluster per large tenant, for the biggest customers with strict isolation needs.
+
+### Q117. What are time-series collections?
+**Answer:** Introduced in MongoDB 5.0, time-series collections are a special collection type optimized for storing sequences of measurements over time (like IoT sensor data or stock prices). Internally MongoDB automatically buckets the data for you (similar to the manual bucket pattern), giving major storage and query performance improvements over a plain collection.
+```javascript
+db.createCollection("weather", {
+  timeseries: { timeField: "timestamp", metaField: "sensorId", granularity: "hours" }
+})
+```
+
+### Q118. What is a wildcard index?
+**Answer:** A wildcard index (`{"$**": 1}`) indexes all fields (or all fields under a specified path) without you having to know their exact names in advance — useful for collections with highly variable/unpredictable schemas, though it's generally less efficient than a targeted index on known fields.
+```javascript
+db.products.createIndex({ "$**": 1 })
+```
+
+### Q119. What is collation in MongoDB?
+**Answer:** Collation defines language-specific rules for string comparison — like case-insensitivity or accent sensitivity — used in both queries and indexes. Without it, MongoDB does a byte-by-byte comparison, so "apple" and "Apple" are considered different.
+```javascript
+db.users.createIndex({ name: 1 }, { collation: { locale: "en", strength: 2 } })
+```
+
+### Q120. How do geospatial indexes and queries work?
+**Answer:** MongoDB supports `2dsphere` indexes for geographic (earth-like, longitude/latitude) data, enabling queries like `$near` (points closest to a location) and `$geoWithin` (points inside a shape like a polygon or circle) — powering features like "restaurants near me."
+```javascript
+db.places.createIndex({ location: "2dsphere" })
+db.places.find({
+  location: { $near: { $geometry: { type: "Point", coordinates: [88.36, 22.57] }, $maxDistance: 5000 } }
+})
+```
+
+### Q121. What options exist for encrypting data in MongoDB?
+**Answer:** **Encryption at rest** (via WiredTiger's native encryption or filesystem/disk-level encryption) protects data stored on disk. **TLS/SSL** encrypts data in transit between clients and the server. **Client-Side Field Level Encryption (CSFLE)** goes further, encrypting specific sensitive fields on the client before they ever reach the server, so even database admins can't read them in plaintext.
+
+### Q122. What is the "working set" and why does it matter for performance?
+**Answer:** The working set is the portion of data and indexes actively being accessed. If it fits in RAM (via WiredTiger's cache), reads/writes are fast; if it exceeds available memory, MongoDB has to repeatedly read from disk, causing performance to degrade sharply. Sizing hardware around the working set (not total data size) is a key capacity-planning skill.
+
+### Q123. What's the difference between scaling MongoDB vertically vs. horizontally?
+**Answer:** Vertical scaling means adding more CPU/RAM/disk to a single server — simple, but has a hard ceiling and a single point of failure. Horizontal scaling (sharding) spreads data across multiple servers, allowing near-limitless growth and better fault tolerance, at the cost of added operational complexity.
+
+### Q124. Is MongoDB "eventually consistent" or "strongly consistent"?
+**Answer:** By default, reads from the primary are strongly consistent (you always see your own latest writes). Reads from secondaries can be eventually consistent, since replication is asynchronous and secondaries may briefly lag behind the primary. You can tune this with read/write concerns and causal consistency depending on your needs.
+
+### Q125. How does MongoDB relate to the CAP theorem?
+**Answer:** MongoDB is generally categorized as CP (Consistency + Partition tolerance) when configured with majority write/read concerns — during a network partition, it prioritizes not returning stale/incorrect data over staying fully available, since a replica set requires a majority to elect a primary and accept writes.
+
+### Q126. Why does oplog size matter, and what happens if it's too small?
+**Answer:** The oplog is a capped collection, so old entries get overwritten once it's full. If a secondary falls behind for longer than the oplog window (the time span of operations currently stored), it can no longer catch up incrementally and requires a full resync — so oplog size should be large enough to cover realistic downtime/lag scenarios.
+
+### Q127. What is "resumable initial sync"?
+**Answer:** When a new or recovering secondary needs to copy all data from scratch ("initial sync"), resumable initial sync (added in MongoDB 4.4) allows it to resume from where it left off after a network interruption, instead of restarting the entire sync from zero.
+
+### Q128. How would you use the database profiler to diagnose a production performance issue?
+**Answer:** Enable profiling at level 1 with a `slowms` threshold to only capture slow operations, let it run during the problem window, then query `db.system.profile` sorted by execution time or timestamp to identify which queries are slow, how often they run, and whether they used an index (`planSummary`).
+
+### Q129. How does building a new index affect a live production collection?
+**Answer:** Modern MongoDB builds indexes using an optimized build process that allows concurrent reads/writes on the collection, but it still consumes CPU/IO resources and can temporarily slow down other operations — so large index builds are usually scheduled during lower-traffic windows, and on a secondary first in older workflows.
+
+### Q130. What is unbounded array growth, and why is it considered an anti-pattern?
+**Answer:** This happens when an array field in a document keeps growing indefinitely (e.g., appending every comment ever made to a single "post" document). Eventually it risks hitting the 16MB document limit, and every update to the array requires MongoDB to rewrite more and more data, hurting performance well before that limit is reached.
+
+### Q131. What does the "$bucket" and "$bucketAuto" aggregation stages do?
+**Answer:** They group documents into ranges ("buckets") based on a field's value — `$bucket` requires you to define the boundaries yourself, while `$bucketAuto` automatically divides documents into a specified number of roughly equal-sized buckets. Useful for building histograms, like grouping orders by price range.
+```javascript
+db.orders.aggregate([
+  { $bucket: { groupBy: "$amount", boundaries: [0, 100, 500, 1000], default: "1000+" } }
+])
+```
+
+### Q132. What does `$sortByCount` do?
+**Answer:** `$sortByCount` groups documents by a given expression and counts how many fall into each group, then sorts the results by count descending — a shorthand for a common `$group` + `$sort` combo.
+```javascript
+db.orders.aggregate([{ $sortByCount: "$status" }])
+```
+
+### Q133. What is a MongoDB "view"?
+**Answer:** A view is a read-only, virtual collection defined by an aggregation pipeline over an underlying collection — queries against the view run the pipeline on the fly. It's useful for exposing a simplified or filtered version of data without duplicating storage.
+```javascript
+db.createView("activeUsers", "users", [{ $match: { status: "active" } }])
+```
+
+### Q134. What are "hidden" and "delayed" replica set members used for?
+**Answer:** A hidden member replicates data but is invisible to client read-preference routing — useful for dedicated backup or analytics nodes that shouldn't serve regular app traffic. A delayed member intentionally lags behind the primary by a configured time window, acting as a safety net to recover from accidental data corruption or bad deletes.
+
+### Q135. What are resume tokens in change streams used for?
+**Answer:** A resume token marks a position in the change stream. If your application's connection drops, you can pass the last-seen resume token back in when you reopen the change stream, so you pick up exactly where you left off instead of missing or duplicating events.
+```javascript
+const cs = db.orders.watch([], { resumeAfter: lastResumeToken });
+```
+
+### Q136. What is Atlas Search?
+**Answer:** Atlas Search is MongoDB Atlas's built-in full-text search engine, built on Apache Lucene, offering more advanced capabilities than native `$text` search — like fuzzy matching, autocomplete, relevance tuning, and faceted search — without needing a separate Elasticsearch deployment.
+
+### Q137. How would you design a schema for very high write throughput (e.g., IoT/event ingestion)?
+**Answer:** Favor append-only writes (avoid updating existing documents where possible), use the bucket pattern or native time-series collections to reduce document/index overhead, choose a shard key that spreads writes evenly (avoiding monotonically increasing keys), and consider relaxing write concern (`w:1`) if some risk of data loss on failover is acceptable for that workload.
+
+### Q138. What are common MongoDB schema anti-patterns to avoid?
+**Answer:** Unbounded arrays that keep growing, deeply nested documents that are hard to query/index, too many indexes on a write-heavy collection (each index adds write overhead), massive numbers of collections (one per user, for instance), and relying on `$lookup` joins so heavily that you're basically simulating a relational database poorly.
+
+### Q139. How can you split read and write traffic across a replica set for scaling reads?
+**Answer:** By setting an appropriate read preference (like `secondaryPreferred`) for read-heavy, latency-tolerant queries (like analytics or reporting), while writes and consistency-critical reads still go to the primary. This offloads read pressure without needing full sharding.
+
+### Q140. What is the difference between a "logical" backup (mongodump) and a "physical"/filesystem-level backup?
+**Answer:** A logical backup (`mongodump`) reads and exports data through the database, producing portable BSON files — flexible but slower for large datasets and doesn't capture in-progress writes cleanly without extra care. A physical backup copies the actual data files on disk (or uses Atlas's continuous backup/snapshots) — much faster to restore for very large databases, but tied to the same MongoDB version/storage engine.
+
+### Q141. How does MongoDB handle schema migrations without downtime on a large collection?
+**Answer:** Typically via a rolling, backward-compatible strategy: deploy application code that can read both old and new document shapes, then migrate documents gradually in the background (in batches, off-peak), and only remove support for the old shape once migration is confirmed complete.
+
+### Q142. What is the impact of a large number of indexes on write performance?
+**Answer:** Every index must be updated whenever a document is inserted, updated, or deleted, so each additional index adds write overhead and disk usage. This is why index design is a trade-off: index the fields you actually query/sort on, and periodically review and drop unused indexes (`$indexStats` can help identify them).
+
+### Q143. What is `$indexStats` used for?
+**Answer:** It returns usage statistics for each index on a collection — how many times each has been used since the server started — helping you identify indexes that are rarely or never used and are just costing write overhead for no benefit.
+```javascript
+db.users.aggregate([{ $indexStats: {} }])
+```
+
+### Q144. How do you design a schema to efficiently support "infinite scroll" pagination on a huge collection?
+**Answer:** Avoid `skip()` for deep pagination since it still has to walk past all skipped documents internally, getting slower the deeper you go. Instead, use "cursor-based" (a.k.a. keyset) pagination: sort by an indexed, unique field like `_id` or `createdAt`, and query `{ _id: { $gt: lastSeenId } }` for the next page.
+```javascript
+db.posts.find({ _id: { $gt: lastSeenId } }).sort({ _id: 1 }).limit(20)
+```
+
+### Q145. What is the difference between `$facet` and running multiple separate queries?
+**Answer:** `$facet` runs multiple pipelines within a single database round trip on the same input, which reduces network overhead compared to firing off several separate queries — but keep in mind all facets run against documents already loaded into that stage, so it can use more memory for very large inputs.
+
+### Q146. How would you model a social media "feed" (posts + likes + comments at scale) in MongoDB?
+**Answer:** Store posts in their own collection. Store a `likeCount`/`commentCount` directly on the post document (computed pattern) for fast display, rather than counting a separate collection on every read. Store actual likes/comments in their own collections referencing the post `_id`, since they can grow unbounded and shouldn't be embedded directly in the post.
+
+### Q147. What's a practical strategy for handling schema validation errors gracefully in production?
+**Answer:** Start with `validationLevel: "moderate"` (only validates new/modified documents, not existing ones) and `validationAction: "warn"` (logs violations instead of rejecting them) while you assess the impact, then tighten to `"strict"`/`"error"` once you're confident existing and new data conforms.
+```javascript
+db.runCommand({
+  collMod: "users",
+  validationLevel: "moderate",
+  validationAction: "warn"
+})
+```
+
+### Q148. How do you decide between embedding and using `$lookup` for a "product + reviews" scenario?
+**Answer:** If you usually display just a handful of recent/top reviews with the product, embed a small subset (subset pattern) for fast reads. If you need the full, unbounded review history (with pagination, sorting, moderation), keep reviews in a separate collection and use `$lookup` (or a separate query) only when actually needed, rather than always joining.
+
+### Q149. What is the "extended reference pattern"?
+**Answer:** Instead of embedding an entire related document or only storing its `_id`, you embed just the handful of fields from the related document that you frequently need to display (like a customer's name and email inside an order), while the reference `_id` is still kept for looking up full details when necessary. This avoids extra joins for common display cases.
+```javascript
+{ orderId: 1, customer: { _id: ObjectId("..."), name: "A", email: "a@x.com" } }
+```
+
+### Q150. How would you approach zero-downtime migration from a single MongoDB instance to a sharded cluster?
+**Answer:** Convert the standalone instance to a replica set first (zero downtime, since replica sets are drop-in compatible with single-instance drivers). Then add shards, deploy config servers and `mongos` routers, and use `sh.shardCollection()` on the target collections — MongoDB handles migrating existing data into shards using the balancer, all while the application keeps running against `mongos`.
+
+## 1.4 Super-Advanced (Q151–Q200)
+
+### Q151. How does WiredTiger's MVCC (multi-version concurrency control) work internally?
+**Answer:** WiredTiger keeps multiple versions of documents in memory/disk using a B-tree structure, and each read operation sees a consistent "snapshot" of the data as of the moment it started, even while other writes happen concurrently. Writers create new versions rather than overwriting in place, and old versions are cleaned up once no active transaction needs them — this is what allows document-level concurrency without traditional locking.
+
+### Q152. Why is oplog idempotency important, and how does MongoDB achieve it?
+**Answer:** Since a secondary might apply the same oplog entry more than once (e.g., after a crash and restart before acknowledging), each oplog entry is written in a way that applying it multiple times produces the same result as applying it once — for example, `$inc` operations are translated into an absolute `$set` of the resulting value in the oplog, rather than storing the increment itself.
+
+### Q153. How does the two-phase commit protocol work for distributed (cross-shard) transactions?
+**Answer:** One shard acts as the transaction coordinator. In phase one, it asks all participating shards to prepare (persist the transaction's operations without committing), and each responds with a "vote." In phase two, if all shards voted to prepare successfully, the coordinator tells everyone to commit; if any failed, it tells everyone to abort — this ensures all-or-nothing behavior even across independently-failing servers.
+
+### Q154. What happens internally during chunk migration in a sharded cluster?
+**Answer:** The balancer selects a chunk and a destination shard, then the source shard copies matching documents to the destination in the background while continuing to serve reads/writes for that chunk. Once the bulk copy is done, it briefly pauses writes to that chunk to copy any remaining changes, atomically updates the routing metadata on the config servers to point to the new shard, and then deletes the chunk's data from the source.
+
+### Q155. What is a "jumbo chunk" and why is it problematic?
+**Answer:** A jumbo chunk exceeds the configured chunk size limit but can't be split further — usually because too many documents share the same shard key value. Since the balancer can't move jumbo chunks efficiently, they can cause persistent data imbalance across shards, which is why shard key cardinality matters so much.
+
+### Q156. What is zone (tag-aware) sharding used for?
+**Answer:** Zone sharding lets you associate ranges of shard key values with specific shards (zones) — for example, keeping European customers' data on shards physically located in Europe for data residency/latency reasons, while the balancer still automatically handles distribution within each zone.
+```javascript
+sh.addShardToZone("shard0", "EU")
+sh.updateZoneKeyRange("shop.customers", { region: "EU" }, { region: "EU\uffff" }, "EU")
+```
+
+### Q157. What is live resharding, and how is it different from the old approach of manually re-sharding?
+**Answer:** Introduced in MongoDB 5.0, live resharding lets you change a collection's shard key without downtime — MongoDB clones the data under the new shard key in the background, keeps it in sync via change streams, and then does a brief atomic cutover. Previously, changing a shard key required dumping and reloading the entire collection manually.
+
+### Q158. What are change stream pre- and post-images, and why were they added?
+**Answer:** By default, a change stream event for an update only shows which fields changed, not the full document before/after. Enabling pre-images (the document before the change) and post-images (the document after) on a collection gives change stream consumers full before/after snapshots — useful for auditing or building accurate downstream replicas without a separate lookup.
+```javascript
+db.runCommand({ collMod: "orders", changeStreamPreAndPostImages: { enabled: true } })
+```
+
+### Q159. What is Queryable Encryption?
+**Answer:** Queryable Encryption (introduced in MongoDB 6.0) allows the server to run **equality queries directly on encrypted field data** without ever decrypting it server-side — unlike CSFLE, which required decrypting or only supported very limited query patterns on encrypted fields. It's designed for regulated data (like SSNs or medical IDs) where even the database operator shouldn't see plaintext.
+
+### Q160. How does the "majority commit point" relate to rollbacks in a replica set?
+**Answer:** The majority commit point is the latest oplog entry acknowledged by a majority of replica set members. If a primary crashes before some of its writes reach the majority commit point, and a different node (which hadn't seen those writes) becomes the new primary, those un-replicated writes are rolled back on the old primary once it rejoins — which is why `w: "majority"` write concern matters for durability guarantees.
+
+### Q161. What happens during a replica set rollback, mechanically?
+**Answer:** When a former primary rejoins the set after a new primary has been elected and has diverged (accepted different writes), MongoDB identifies the common point where the two histories diverged, and writes made by the old primary after that point are reverted from it (saved to rollback files) so it can catch up cleanly with the new primary's oplog.
+
+### Q162. What is Point-in-Time Recovery (PITR) in MongoDB Atlas?
+**Answer:** PITR uses continuous oplog backups alongside periodic snapshots so you can restore a cluster's data to any specific timestamp (down to the second) within a retention window — useful for recovering from an accidental bad write or deletion without losing all data since the last full snapshot.
+
+### Q163. What is Atlas Online Archive?
+**Answer:** Online Archive automatically moves older, less-frequently-accessed data (based on a rule you define, like documents older than 90 days) from your live cluster to cheaper cloud object storage, while still letting you query across both "hot" and "archived" data through a unified endpoint — reducing cluster costs for large historical datasets.
+
+### Q164. What is an Atlas Serverless instance?
+**Answer:** A deployment model where you don't provision fixed server capacity — MongoDB Atlas automatically scales resources up and down based on actual traffic, and you're billed per operation/storage used rather than a fixed instance size. It's suited for unpredictable or spiky workloads where a fixed-size cluster would be over- or under-provisioned much of the time.
+
+### Q165. What is a "global cluster" / geo-sharded cluster in Atlas?
+**Answer:** A global cluster uses zone sharding under the hood to automatically pin each user's/region's data to shards physically located in specific geographic regions, reducing latency for users worldwide and helping meet data-residency regulations — all managed through Atlas's UI rather than manual zone configuration.
+
+### Q166. What is an Atlas "Analytics Node"?
+**Answer:** A replica set member dedicated to serving analytics/reporting/ETL workloads, isolated from your operational read/write traffic — you route analytics queries to it via read preference tags, so heavy reporting queries don't compete for resources with your live application.
+
+### Q167. How does Atlas Search (`mongot`) architecturally relate to the main `mongod` process?
+**Answer:** Atlas Search runs as a separate process (`mongot`) alongside `mongod`, maintaining its own Lucene-based search index that's kept in sync with the underlying collection via change streams — so search queries are served by a purpose-built search engine without impacting the core database's query performance.
+
+### Q168. What is MongoDB Atlas Vector Search used for?
+**Answer:** Vector Search lets you store vector embeddings (numerical representations of text, images, etc., typically produced by an AI/ML model) alongside your regular data, and run approximate nearest-neighbor (ANN) similarity searches on them — the core building block for AI use cases like semantic search and Retrieval-Augmented Generation (RAG).
+```javascript
+db.articles.aggregate([
+  { $vectorSearch: {
+      index: "vector_index", path: "embedding",
+      queryVector: [0.12, 0.87, ...], numCandidates: 100, limit: 5
+  }}
+])
+```
+
+### Q169. How would you handle a sudden "connection storm" (thousands of new connections at once) against MongoDB?
+**Answer:** Ensure application-side connection pools are sized sensibly rather than opening unbounded connections, configure the server's `maxIncomingConnections` as a safety net, use a proxy/load balancer with connection queuing in front of `mongos` in sharded setups, and consider a serverless/auto-scaling Atlas tier that can absorb spikes rather than fixed capacity.
+
+### Q170. How do you design writes to be idempotent when using retries in a distributed system with MongoDB?
+**Answer:** Use natural or client-generated unique keys with `upsert: true` so retrying the same logical operation doesn't create duplicates, or use `$setOnInsert` for fields that should only be set the first time. Combined with retryable writes at the driver level, this makes "at-least-once" delivery behave like "exactly-once" from the data's perspective.
+```javascript
+db.payments.updateOne(
+  { paymentId: "client-generated-uuid" },
+  { $setOnInsert: { amount: 500, status: "processed" } },
+  { upsert: true }
+)
+```
+
+### Q171. How could you implement the Saga pattern using MongoDB change streams instead of distributed transactions?
+**Answer:** Each service writes its own local state change and emits an event by writing to its own collection; other services listen via change streams and react by performing their own local step (and compensating/rolling back their own step if a later step in the saga fails) — avoiding the tighter coupling and blocking nature of a true distributed transaction across services.
+
+### Q172. How would you implement event sourcing with MongoDB?
+**Answer:** Store every state-changing event as an immutable, append-only document in an "events" collection (never update or delete them), and derive the current state of an entity by replaying its events in order — often with periodic "snapshot" documents to avoid replaying the entire history every time. MongoDB's flexible schema and fast appends make it a natural fit for the event store itself.
+
+### Q173. How does CQRS (Command Query Responsibility Segregation) typically pair with MongoDB?
+**Answer:** Writes ("commands") go to a normalized/event-sourced model optimized for correctness, while a separate, denormalized "read model" collection — built and kept in sync via change streams or `$merge` — is optimized purely for fast reads matching your UI's exact query patterns, even if that means duplicating data.
+
+### Q174. What is "crypto-shredding" and how does it help with GDPR "right to be forgotten" requests?
+**Answer:** Instead of hunting down and deleting a user's data across every collection/backup (which is hard to guarantee completely), you encrypt each user's sensitive data with a unique key. To "delete" the user, you simply destroy their encryption key — instantly making all their historical data permanently unreadable, even in old backups, without physically deleting anything.
+
+### Q175. How would you implement audit logging for compliance in MongoDB?
+**Answer:** MongoDB Enterprise/Atlas offers a built-in audit log that records authentication events, CRUD operations, and admin actions to a configurable output (file, syslog, or another collection), filterable by user/action/namespace — used to prove compliance (e.g., "who accessed this record and when") for regulations like HIPAA or SOC 2.
+
+### Q176. Since MongoDB lacks native column/field-level RBAC out of the box, how do teams restrict access to specific sensitive fields?
+**Answer:** Common approaches: (1) use views with `$project` to expose only allowed fields to certain roles/users, (2) enforce field-level filtering in the application layer, or (3) use Client-Side Field Level Encryption/Queryable Encryption so only clients holding the right key can decrypt specific fields at all, regardless of what raw access they have.
+
+### Q177. What is the query plan cache, and why can a "bad" cached plan hurt performance?
+**Answer:** MongoDB caches the winning execution plan for a given query "shape" (structure, ignoring literal values) so it doesn't have to re-evaluate candidate plans every time. If the underlying data distribution changes significantly (e.g., a field that used to be highly selective no longer is), a previously-good cached plan can become suboptimal until the cache entry is evicted/recalculated.
+```javascript
+db.users.getPlanCache().clear()
+```
+
+### Q178. What are "hedged reads" in a sharded cluster?
+**Answer:** For `nearest` read preference in a sharded cluster, `mongos` can send the same read request to multiple replica set members simultaneously and use whichever response comes back first — reducing tail latency at the cost of some extra load, useful for latency-sensitive applications.
+
+### Q179. What is "speculative majority" read/write behavior?
+**Answer:** An internal optimization used in scenarios like transaction commits, where MongoDB proceeds as if a majority-acknowledged write will succeed (speculatively), rather than always blocking and waiting — improving latency for certain internal operations while still preserving correctness guarantees.
+
+### Q180. How does MongoDB's "cluster time" support causal consistency across a sharded cluster?
+**Answer:** Cluster time is a logical, cluster-wide timestamp that every node and client session tracks and passes along with requests. It lets MongoDB order causally-related operations correctly across different shards/replica sets, even though there's no single global clock — critical for causal consistency guarantees to hold in a distributed, sharded environment.
+
+### Q181. How does WiredTiger's cache eviction work when memory pressure is high?
+**Answer:** WiredTiger's internal cache (by default ~50% of RAM minus 1GB) holds "dirty" (modified, not yet checkpointed) and "clean" pages. When the cache fills up, background eviction threads write dirty pages to disk and remove clean pages to free space; if eviction can't keep up with the write rate, application threads themselves are forced to help evict pages, which shows up as increased write latency — a key symptom to watch for in performance monitoring.
+
+### Q182. How would you do capacity planning for a new sharded MongoDB deployment?
+**Answer:** Estimate total data size + index size + expected growth, factor in the working set needing to fit in RAM per shard for good performance, project peak IOPS/throughput requirements, choose a shard key based on both the query pattern and even write distribution, and plan for N+ shards with headroom rather than sizing exactly to today's load, since resharding later is costly.
+
+### Q183. What is the difference between "vertical partitioning" (splitting fields across collections) and sharding?
+**Answer:** Vertical partitioning splits a single logical entity's fields across multiple collections (e.g., keeping frequently-accessed fields in one collection and rarely-accessed large fields in another) to reduce the size of "hot" documents. Sharding splits documents of the *same* collection across servers by shard key — they solve different problems and can be combined.
+
+### Q184. How would you migrate a huge, actively-written-to collection to a new shard key with minimal risk, before MongoDB 5.0's live resharding existed?
+**Answer:** A common pre-5.0 approach: create a new collection with the desired shard key, run a background process to copy existing data over, use change streams (or dual-writes from the application) to keep the new collection in sync with ongoing writes, then do a brief cutover once both are confirmed in sync — essentially replicating what live resharding now automates.
+
+### Q185. What are the risks of running MongoDB transactions that span a long duration or touch many documents?
+**Answer:** Long-running or large transactions hold locks/snapshots longer, increasing the chance of write conflicts with other operations, consuming more resources (like the oplog and cache, since MongoDB must retain the pre-transaction state for the transaction's duration), and by default MongoDB kills transactions that exceed a configurable time limit to protect the cluster.
+
+### Q186. How would you detect and resolve a "hot chunk" that's overwhelming a single shard despite reasonable shard key cardinality?
+**Answer:** Monitor per-shard operation/CPU metrics to spot imbalance, check if a specific range of shard key values is unusually popular (e.g., a viral product ID or celebrity user), then apply zone sharding to manually redistribute, pre-split chunks around that range proactively, or reconsider the shard key design (e.g., adding a hashed suffix) if this is a recurring pattern.
+
+### Q187. What is the significance of `readConcern: "linearizable"` and when would you use it?
+**Answer:** Linearizable read concern guarantees a read reflects all writes that completed before the read started, system-wide — the strongest consistency guarantee MongoDB offers, but it's slower (it must confirm with a majority) and only applies to reading a single document. It's used for the rare cases needing absolute real-time correctness, like checking a lock/flag right before a critical action.
+
+### Q188. How do you reason about the trade-off between compound index size/maintenance cost and query coverage when a collection has many different query patterns?
+**Answer:** You generally can't index every possible query pattern without crippling write performance, so you profile actual production query shapes (via the profiler or `$indexStats`), prioritize indexes that cover the highest-frequency and most latency-sensitive queries, look for opportunities where one well-ordered compound index can serve several related query shapes (using prefixes), and accept `COLLSCAN` for rare, low-priority queries.
+
+### Q189. What is the ESR (Equality, Sort, Range) rule for compound index field ordering?
+**Answer:** When designing a compound index for a query that has equality filters, a sort, and range filters, order the index fields as: **E**quality fields first, then **S**ort fields, then **R**ange fields last. This lets MongoDB narrow down to exact matches first, walk the index in the required sort order, then apply range bounds — minimizing the documents it needs to examine.
+```javascript
+// Query: find({status: "active", age: {$gte: 18}}).sort({createdAt: -1})
+db.users.createIndex({ status: 1, createdAt: -1, age: 1 }) // E, S, R
+```
+
+### Q190. How would you architect MongoDB usage to support both strong transactional guarantees for orders and high write throughput for clickstream analytics in the same platform?
+**Answer:** Use separate collections/clusters tuned for each workload: a smaller, transaction-friendly replica set (or shard) for order data with `w: "majority"` and multi-document transactions where money is involved; a separately-sharded, high-throughput collection (or time-series collection) for clickstream events using relaxed write concern and denormalized/bucketed writes, since perfect consistency matters far less there than raw ingestion speed.
+
+### Q191. What is the risk of using `$where` or `mapReduce`, and what's typically recommended instead today?
+**Answer:** `$where` executes arbitrary JavaScript per document, which is slow (can't use indexes, runs single-threaded in a JS engine) and has historically been a security risk (JS injection) if not sanitized. `mapReduce` is similarly slower and largely superseded — the modern aggregation framework covers nearly all the same use cases with better performance and is the recommended approach today.
+
+### Q192. How does MongoDB's aggregation pipeline optimizer reorder/merge stages, and why should you still write efficient pipelines?
+**Answer:** MongoDB does apply some automatic optimizations — like pushing a later `$match` earlier if it doesn't change semantics, or combining consecutive `$sort`+`$limit` — but it can't rewrite fundamentally inefficient pipeline logic (like unwinding a huge array before filtering it). Writing `$match`/`$limit` as early as possible yourself remains a best practice rather than something to rely on the optimizer to fix.
+
+### Q193. How would you design a schema and indexing strategy to support both fast writes and fast complex analytical queries, without sharding?
+**Answer:** Keep the primary (operational) collection lean with only the indexes needed for live app queries, and use `$merge`-based materialized views or a change-stream-fed secondary "reporting" collection with its own analytics-friendly indexes/shape — so heavy ad-hoc analytical queries don't compete with or bloat the indexes on your write-heavy operational collection.
+
+### Q194. What is "read-your-own-writes" consistency, and how do you guarantee it against a MongoDB replica set with secondary reads enabled?
+**Answer:** It's the guarantee that a client always sees its own previous writes on subsequent reads. With secondary reads enabled, this isn't automatic (a lagging secondary might not have the write yet); you guarantee it by using causal consistency within a client session, or by explicitly reading from the primary for that particular follow-up read.
+
+### Q195. What internal mechanism lets MongoDB support "snapshot" isolation for a single transaction?
+**Answer:** WiredTiger's MVCC engine gives a transaction a consistent point-in-time snapshot of the data at its start, so all reads within that transaction see the data as it was then, regardless of concurrent writes from other transactions — those concurrent writes simply aren't visible until they commit and the reading transaction is finished (or restarted).
+
+### Q196. How would you plan a major MongoDB version upgrade (e.g., major version bump) on a production sharded cluster with zero downtime?
+**Answer:** Follow MongoDB's documented upgrade order: config servers first, then shards one at a time (upgrading secondaries before the primary within each replica set, triggering a stepdown for the primary last), then `mongos` routers — always confirming feature compatibility version (FCV) is set appropriately before/after, since FCV gates which new features are actually active and provides a safety rollback window.
+
+### Q197. What is the purpose of the "feature compatibility version" (FCV) setting?
+**Answer:** FCV decouples upgrading the MongoDB binary from actually enabling new on-disk format features. After upgrading binaries, the cluster keeps behaving like the older version until you explicitly raise FCV — giving you a safe rollback path (you can downgrade the binary) before you commit to new, potentially incompatible features.
+
+### Q198. How would you approach debugging a mysterious, intermittent replica set failover in production?
+**Answer:** Check replica set logs around the failover time for election reasons (network partition, heartbeat timeout, primary stepdown due to resource exhaustion), review `rs.status()` history and monitoring for CPU/memory/disk spikes, check for long-running operations that may have blocked heartbeats, and review network monitoring for packet loss or latency spikes between members.
+
+### Q199. What are the trade-offs of using MongoDB as a queue (via capped collections/change streams) versus a dedicated message broker like Kafka or RabbitMQ?
+**Answer:** MongoDB-as-a-queue is convenient when you're already running MongoDB and want to avoid additional infrastructure, and change streams give reasonably real-time delivery. But dedicated brokers offer purpose-built features MongoDB lacks natively — like fine-grained consumer group offset management, guaranteed ordering per-partition at massive scale, and backpressure/flow control — so high-throughput, mission-critical messaging usually still favors a dedicated broker.
+
+### Q200. What's a holistic checklist you'd walk through before declaring a MongoDB schema/deployment "production-ready" for a high-scale application?
+**Answer:** Indexes matching real query patterns (verified with `explain()`), a replica set (minimum 3 data-bearing members) for high availability, appropriate write/read concerns for your consistency needs, monitoring/alerting on replication lag and cache eviction, a tested backup and point-in-time restore process, authentication/RBAC/TLS enabled, a sharding plan (or explicit decision not to shard yet) with a sound shard key if growth is expected, and a schema reviewed against common anti-patterns (unbounded arrays, excessive indexes, oversized documents).
+
+---
+
+<a id="part-2-sql"></a>
+# PART 2: SQL — 200 Questions
+
+## 2.1 Basic (Q1–Q50)
+
+### Q1. What is SQL?
+**Answer:** SQL (Structured Query Language) is the standard language used to create, query, update, and manage data stored in a relational database. It's declarative — you describe *what* data you want, and the database engine figures out *how* to fetch it.
+```sql
+SELECT name, email FROM users WHERE age > 18;
+```
+
+### Q2. What is an RDBMS?
+**Answer:** A Relational Database Management System stores data in structured tables made of rows and columns, with relationships between tables enforced through keys. Examples include MySQL, PostgreSQL, Oracle, and SQL Server.
+
+### Q3. What are the main categories of SQL commands?
+**Answer:** **DDL** (Data Definition Language: `CREATE`, `ALTER`, `DROP`) defines structure. **DML** (Data Manipulation Language: `SELECT`, `INSERT`, `UPDATE`, `DELETE`) manipulates data. **DCL** (Data Control Language: `GRANT`, `REVOKE`) manages permissions. **TCL** (Transaction Control Language: `COMMIT`, `ROLLBACK`, `SAVEPOINT`) manages transactions.
+
+### Q4. How do you create a table?
+**Answer:** `CREATE TABLE` defines a table's name, columns, their data types, and constraints.
+```sql
+CREATE TABLE users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(100) UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Q5. What are common SQL data types?
+**Answer:** `INT`/`BIGINT` for whole numbers, `DECIMAL`/`NUMERIC` for exact fractional numbers (like money), `FLOAT`/`DOUBLE` for approximate fractional numbers, `VARCHAR(n)` for variable-length text, `CHAR(n)` for fixed-length text, `DATE`/`DATETIME`/`TIMESTAMP` for date/time, and `BOOLEAN` for true/false.
+
+### Q6. What is a PRIMARY KEY?
+**Answer:** A primary key uniquely identifies each row in a table. It can't contain `NULL` values, and a table can only have one primary key (though that key can span multiple columns — a composite key).
+```sql
+CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(50));
+```
+
+### Q7. What is a FOREIGN KEY?
+**Answer:** A foreign key is a column (or set of columns) in one table that references the primary key of another table, enforcing that a value must exist in the referenced table — this is how relationships between tables are maintained.
+```sql
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  user_id INT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+```
+
+### Q8. What do `NOT NULL`, `UNIQUE`, `DEFAULT`, and `CHECK` constraints do?
+**Answer:** `NOT NULL` requires a column to always have a value. `UNIQUE` ensures no two rows share the same value in that column. `DEFAULT` supplies a value automatically if none is given. `CHECK` enforces a custom condition on every row.
+```sql
+CREATE TABLE products (
+  price DECIMAL(10,2) CHECK (price >= 0),
+  stock INT DEFAULT 0,
+  sku VARCHAR(20) UNIQUE NOT NULL
+);
+```
+
+### Q9. How do you insert data into a table?
+**Answer:** `INSERT INTO` adds a new row, specifying the columns and their corresponding values.
+```sql
+INSERT INTO users (name, email) VALUES ('Aman', 'aman@mail.com');
+```
+
+### Q10. How do you retrieve data with a basic `SELECT`?
+**Answer:** `SELECT` chooses which columns to return, `FROM` specifies the table, and `WHERE` (optional) filters which rows are included.
+```sql
+SELECT name, email FROM users WHERE city = 'Delhi';
+```
+
+### Q11. What comparison operators are available in `WHERE`?
+**Answer:** `=`, `!=`/`<>`, `>`, `<`, `>=`, `<=` for basic comparisons, plus special ones like `LIKE` (pattern match), `IN` (matches a list), `BETWEEN` (range), and `IS NULL`/`IS NOT NULL`.
+```sql
+SELECT * FROM products WHERE price BETWEEN 100 AND 500;
+```
+
+### Q12. How does `LIKE` pattern matching work?
+**Answer:** `LIKE` matches text patterns using `%` (any number of characters, including zero) and `_` (exactly one character) as wildcards.
+```sql
+SELECT * FROM users WHERE name LIKE 'A%';    -- starts with A
+SELECT * FROM users WHERE email LIKE '%@gmail.com';  -- ends with this
+```
+
+### Q13. How does `IN` work, and how is it different from multiple `OR` conditions?
+**Answer:** `IN` checks if a value matches any value in a given list — functionally equivalent to chaining several `OR` conditions on the same column, but shorter and clearer to read.
+```sql
+SELECT * FROM orders WHERE status IN ('pending', 'shipped');
+-- same as: WHERE status = 'pending' OR status = 'shipped'
+```
+
+### Q14. How do you sort query results?
+**Answer:** `ORDER BY` sorts results by one or more columns; `ASC` (ascending, default) or `DESC` (descending).
+```sql
+SELECT * FROM products ORDER BY price DESC, name ASC;
+```
+
+### Q15. What does `DISTINCT` do?
+**Answer:** `DISTINCT` removes duplicate rows from the result set, based on the selected columns.
+```sql
+SELECT DISTINCT city FROM users;
+```
+
+### Q16. How do you limit the number of rows returned?
+**Answer:** `LIMIT` (MySQL/PostgreSQL) or `TOP`/`FETCH FIRST` (SQL Server/Oracle) restricts the result set size; `OFFSET` skips a number of rows — commonly used together for pagination.
+```sql
+SELECT * FROM products ORDER BY id LIMIT 10 OFFSET 20; -- page 3, 10 per page
+```
+
+### Q17. What are the common aggregate functions?
+**Answer:** `COUNT()` counts rows, `SUM()` totals a numeric column, `AVG()` averages it, `MIN()`/`MAX()` find the smallest/largest value. They operate across a set of rows and return a single value.
+```sql
+SELECT COUNT(*) AS total_orders, SUM(amount) AS revenue FROM orders;
+```
+
+### Q18. What does `GROUP BY` do?
+**Answer:** `GROUP BY` collapses rows sharing the same value(s) in specified columns into groups, so aggregate functions compute per-group instead of across the whole table.
+```sql
+SELECT customer_id, SUM(amount) AS total_spent
+FROM orders
+GROUP BY customer_id;
+```
+
+### Q19. What is `HAVING`, and how is it different from `WHERE`?
+**Answer:** `WHERE` filters individual rows **before** grouping happens; `HAVING` filters **groups** after aggregation, so you can filter based on an aggregate result (like "only customers who spent more than $1000").
+```sql
+SELECT customer_id, SUM(amount) AS total
+FROM orders
+GROUP BY customer_id
+HAVING SUM(amount) > 1000;
+```
+
+### Q20. What is a column/table alias?
+**Answer:** `AS` gives a column or table a temporary name for the duration of the query, making results more readable or shortening long table names in joins.
+```sql
+SELECT u.name AS customer_name, o.amount AS order_total
+FROM users AS u JOIN orders AS o ON u.id = o.user_id;
+```
+
+### Q21. What is an `INNER JOIN`?
+**Answer:** An `INNER JOIN` returns only the rows where there's a match in **both** tables based on the join condition — non-matching rows from either side are excluded.
+```sql
+SELECT u.name, o.amount
+FROM users u
+INNER JOIN orders o ON u.id = o.user_id;
+```
+
+### Q22. What is a `LEFT JOIN` (LEFT OUTER JOIN)?
+**Answer:** A `LEFT JOIN` returns all rows from the left table, plus matching rows from the right table — if there's no match, the right table's columns are `NULL`. Useful for "give me all users, and their orders if they have any."
+```sql
+SELECT u.name, o.amount
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id;
+```
+
+### Q23. What is a `RIGHT JOIN`?
+**Answer:** The mirror of a `LEFT JOIN` — it returns all rows from the right table, plus matching rows from the left, with `NULL`s where there's no match on the left side. In practice, most people just swap table order and use `LEFT JOIN` instead, since it reads more naturally.
+
+### Q24. What is a `FULL OUTER JOIN`?
+**Answer:** Returns all rows from both tables — matched rows are combined, and unmatched rows from either side appear with `NULL`s for the other table's columns. (Note: MySQL doesn't support `FULL OUTER JOIN` directly; it's typically emulated with `UNION` of a `LEFT` and `RIGHT` join.)
+```sql
+SELECT u.name, o.amount
+FROM users u
+FULL OUTER JOIN orders o ON u.id = o.user_id;
+```
+
+### Q25. What is the difference between `UNION` and `UNION ALL`?
+**Answer:** Both combine the results of two queries with the same number/type of columns. `UNION` removes duplicate rows from the combined result (which costs extra processing); `UNION ALL` keeps all rows including duplicates, so it's faster when you know duplicates aren't a concern (or are wanted).
+```sql
+SELECT city FROM customers
+UNION
+SELECT city FROM suppliers;
+```
+
+### Q26. What is a subquery?
+**Answer:** A subquery is a query nested inside another query, used to compute an intermediate result that the outer query uses — in a `WHERE` clause, `FROM` clause, or `SELECT` list.
+```sql
+SELECT name FROM products
+WHERE price > (SELECT AVG(price) FROM products);
+```
+
+### Q27. How do you modify a table's structure with `ALTER TABLE`?
+**Answer:** `ALTER TABLE` adds, modifies, or drops columns and constraints on an existing table without needing to recreate it.
+```sql
+ALTER TABLE users ADD COLUMN phone VARCHAR(15);
+ALTER TABLE users DROP COLUMN phone;
+ALTER TABLE users MODIFY COLUMN name VARCHAR(150); -- MySQL syntax
+```
+
+### Q28. What's the difference between `DELETE`, `TRUNCATE`, and `DROP`?
+**Answer:** `DELETE` removes rows one at a time (can be filtered with `WHERE`, and is logged/rollback-able within a transaction). `TRUNCATE` removes all rows at once very quickly by deallocating data pages (usually can't be filtered, and is minimally logged). `DROP` removes the entire table structure itself, including its definition.
+```sql
+DELETE FROM orders WHERE status = 'cancelled';
+TRUNCATE TABLE temp_logs;
+DROP TABLE old_backup;
+```
+
+### Q29. How do you update existing rows?
+**Answer:** `UPDATE` modifies rows matching a `WHERE` condition; omitting `WHERE` updates **every** row in the table, which is a common and dangerous mistake.
+```sql
+UPDATE users SET city = 'Mumbai' WHERE id = 5;
+```
+
+### Q30. What is auto-increment, and how do different databases implement it?
+**Answer:** Auto-increment automatically generates a unique, incrementing number for a column (usually the primary key) on each insert, so you don't have to manage IDs manually. MySQL uses `AUTO_INCREMENT`, PostgreSQL uses `SERIAL`/`GENERATED ALWAYS AS IDENTITY`, and SQL Server uses `IDENTITY`.
+```sql
+-- PostgreSQL
+CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(50));
+```
+
+### Q31. What does `CASE WHEN` do?
+**Answer:** `CASE WHEN` is SQL's conditional expression — like an if/else — letting you compute different output values based on conditions, directly within a query.
+```sql
+SELECT name,
+  CASE
+    WHEN age < 18 THEN 'Minor'
+    WHEN age < 60 THEN 'Adult'
+    ELSE 'Senior'
+  END AS category
+FROM users;
+```
+
+### Q32. How do you handle `NULL` values with `COALESCE`?
+**Answer:** `COALESCE()` returns the first non-`NULL` value from a list of expressions — commonly used to substitute a default value when a column might be `NULL`.
+```sql
+SELECT name, COALESCE(phone, 'Not provided') AS phone FROM users;
+```
+
+### Q33. Why can't you use `= NULL` to check for `NULL` values?
+**Answer:** `NULL` represents "unknown," and in SQL's three-valued logic, comparing anything to `NULL` with `=` (including `NULL = NULL`) returns `NULL` (unknown), not `TRUE` — so the row is excluded. You must use `IS NULL` or `IS NOT NULL` instead.
+```sql
+SELECT * FROM users WHERE phone IS NULL;
+```
+
+### Q34. What are common string functions in SQL?
+**Answer:** `CONCAT()` joins strings, `UPPER()`/`LOWER()` change case, `LENGTH()`/`CHAR_LENGTH()` gets string length, `SUBSTRING()` extracts part of a string, and `TRIM()` removes leading/trailing whitespace.
+```sql
+SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM users;
+```
+
+### Q35. What are common date functions?
+**Answer:** `NOW()`/`CURRENT_TIMESTAMP` gets the current date-time, `DATE_ADD()`/`DATE_SUB()` (MySQL) or interval arithmetic (PostgreSQL) shifts dates, and `DATEDIFF()` calculates the difference between two dates.
+```sql
+SELECT * FROM orders WHERE created_at >= NOW() - INTERVAL 7 DAY; -- MySQL
+```
+
+### Q36. How do you write comments in SQL?
+**Answer:** `--` starts a single-line comment; `/* ... */` wraps a multi-line comment block.
+```sql
+-- This gets all active users
+SELECT * FROM users WHERE status = 'active'; /* filtering by status */
+```
+
+### Q37. What is the difference between `CHAR` and `VARCHAR`?
+**Answer:** `CHAR(n)` is fixed-length — it always uses `n` characters of storage, padding shorter values with spaces. `VARCHAR(n)` is variable-length — it only uses as much storage as the actual string needs (up to `n`), making it more space-efficient for variable-length text.
+
+### Q38. What is the difference between `VARCHAR` and `TEXT`?
+**Answer:** `VARCHAR(n)` has a defined maximum length and is typically stored inline with the row, making it efficient for short-to-medium strings. `TEXT` is meant for large, arbitrarily long text and may be stored differently internally (e.g., off-page) depending on the database engine.
+
+### Q39. What does the `AS` keyword do beyond simple aliasing — can you use it to rename a table in a join?
+**Answer:** Yes — beyond renaming output columns, `AS` (often used without even writing the word) lets you give a table a short alias within a query, which is essential for self-joins and makes multi-table queries far more readable.
+```sql
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+JOIN employees m ON e.manager_id = m.id;
+```
+
+### Q40. What is a `CROSS JOIN`?
+**Answer:** A `CROSS JOIN` returns the Cartesian product of two tables — every row from the first table paired with every row from the second. It's rarely used intentionally except for generating combinations (like all size/color variants of a product).
+```sql
+SELECT s.size, c.color FROM sizes s CROSS JOIN colors c;
+```
+
+### Q41. What is the difference between `WHERE` and `ON` in a join?
+**Answer:** `ON` specifies the condition used to match rows between the joined tables (part of the join logic itself). `WHERE` filters the combined result **after** the join has happened. This distinction matters especially for outer joins, where putting a filter in `ON` vs. `WHERE` can produce very different results.
+
+### Q42. How do you count the number of rows in a table?
+**Answer:** `COUNT(*)` counts all rows (including ones with `NULL`s); `COUNT(column)` counts only rows where that specific column is not `NULL`.
+```sql
+SELECT COUNT(*) FROM users;
+SELECT COUNT(phone) FROM users; -- only non-null phone numbers
+```
+
+### Q43. What does `BETWEEN` include — is it inclusive or exclusive of the boundary values?
+**Answer:** `BETWEEN a AND b` is inclusive on both ends — it matches values greater than or equal to `a` and less than or equal to `b`.
+```sql
+SELECT * FROM products WHERE price BETWEEN 100 AND 200; -- includes 100 and 200
+```
+
+### Q44. What's the difference between `DROP TABLE IF EXISTS` and just `DROP TABLE`?
+**Answer:** `DROP TABLE tablename` throws an error if the table doesn't exist. `DROP TABLE IF EXISTS tablename` silently does nothing if the table isn't there — useful in scripts that should run safely even if run more than once.
+
+### Q45. How do you rename a table or column?
+**Answer:** Syntax varies slightly by database, but generally you use `ALTER TABLE ... RENAME`.
+```sql
+ALTER TABLE users RENAME TO customers;               -- PostgreSQL/MySQL 8+
+ALTER TABLE customers RENAME COLUMN name TO full_name; -- PostgreSQL
+```
+
+### Q46. What does `NOT IN` do, and what's a common pitfall with it?
+**Answer:** `NOT IN` excludes rows matching any value in a list. The common pitfall: if the list (often from a subquery) contains even one `NULL`, the entire `NOT IN` condition returns no rows at all (due to three-valued logic), which surprises many developers — `NOT EXISTS` is usually safer.
+```sql
+-- Risky if user_id can be NULL in the subquery result:
+SELECT * FROM products WHERE id NOT IN (SELECT product_id FROM orders);
+```
+
+### Q47. What is a composite primary key?
+**Answer:** A primary key made up of two or more columns together, where the *combination* must be unique (even if individual columns repeat) — common in join/junction tables.
+```sql
+CREATE TABLE enrollments (
+  student_id INT,
+  course_id INT,
+  PRIMARY KEY (student_id, course_id)
+);
+```
+
+### Q48. What does `ORDER BY` combined with `NULLS FIRST`/`NULLS LAST` control?
+**Answer:** It explicitly controls where `NULL` values appear in sorted results (PostgreSQL/Oracle syntax), since default `NULL` placement in sorting can vary by database engine.
+```sql
+SELECT * FROM users ORDER BY last_login DESC NULLS LAST;
+```
+
+### Q49. How do you select the top N rows per the highest value of a column, in the simplest way (without window functions)?
+**Answer:** Combine `ORDER BY` with `LIMIT` to get the overall top N rows by a column.
+```sql
+SELECT * FROM products ORDER BY price DESC LIMIT 5;
+```
+
+### Q50. What is referential integrity?
+**Answer:** Referential integrity means relationships between tables (via foreign keys) stay valid — you can't insert a row referencing a non-existent parent row, and by default you can't delete a parent row while child rows still reference it (unless cascading rules are defined).
+
+## 2.2 Intermediate (Q51–Q100)
+
+### Q51. What is a self join, and when would you use one?
+**Answer:** A self join joins a table to itself, treated as if it were two separate tables (using aliases) — used when rows in a table relate to other rows in the same table, like employees referencing their manager (who is also an employee).
+```sql
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;
+```
+
+### Q52. What is a correlated subquery, and how is it different from a regular subquery?
+**Answer:** A regular subquery runs once, independently of the outer query. A correlated subquery references a column from the outer query, so it conceptually re-runs once **per row** of the outer query — more flexible, but often slower unless the optimizer can rewrite it efficiently.
+```sql
+SELECT name FROM employees e
+WHERE salary > (
+  SELECT AVG(salary) FROM employees WHERE department_id = e.department_id
+);
+```
+
+### Q53. What does `EXISTS` do, and why is it often preferred over `IN` with subqueries?
+**Answer:** `EXISTS` checks whether a subquery returns **any** rows at all, stopping as soon as it finds one match, rather than comparing against a full list of values like `IN` does. It also correctly handles `NULL`s in the subquery, unlike `NOT IN`.
+```sql
+SELECT name FROM customers c
+WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);
+```
+
+### Q54. What do `ANY` and `ALL` do when used with a subquery?
+**Answer:** `> ANY (subquery)` is true if the value is greater than **at least one** value returned by the subquery. `> ALL (subquery)` is true only if it's greater than **every** value returned.
+```sql
+SELECT name FROM products
+WHERE price > ALL (SELECT price FROM products WHERE category = 'budget');
+```
+
+### Q55. What is a view?
+**Answer:** A view is a saved, named `SELECT` query that behaves like a virtual table — it doesn't store data itself (in the default case), but re-runs its underlying query each time you select from it. Views simplify complex queries and can restrict which columns/rows users see.
+```sql
+CREATE VIEW active_customers AS
+SELECT id, name, email FROM customers WHERE status = 'active';
+
+SELECT * FROM active_customers;
+```
+
+### Q56. How does an index in SQL improve performance, and what's the trade-off?
+**Answer:** An index (typically a B-tree) lets the database jump directly to matching rows instead of scanning the whole table, dramatically speeding up lookups, joins, and sorts on the indexed column(s). The trade-off: every insert/update/delete must also update the index, adding write overhead, and indexes consume additional storage.
+```sql
+CREATE INDEX idx_users_email ON users(email);
+```
+
+### Q57. What normalization forms should every developer know (1NF, 2NF, 3NF)?
+**Answer:** **1NF**: each column holds atomic (indivisible) values, no repeating groups. **2NF**: builds on 1NF — every non-key column depends on the **whole** primary key (relevant when using composite keys), not just part of it. **3NF**: builds on 2NF — no non-key column depends on another non-key column (no "transitive" dependencies). Together, these reduce data duplication and update anomalies.
+
+### Q58. What is denormalization, and when is it a reasonable trade-off?
+**Answer:** Denormalization intentionally introduces some redundancy (e.g., storing a customer's name directly on an order row instead of only referencing it) to reduce the number of joins needed for common read-heavy queries — a reasonable trade-off in reporting/analytics systems or when read performance matters more than avoiding duplicate data.
+
+### Q59. What does ACID stand for?
+**Answer:** **Atomicity** (a transaction's operations all succeed or all fail together), **Consistency** (a transaction moves the database from one valid state to another, respecting all constraints), **Isolation** (concurrent transactions don't interfere with each other's intermediate state), and **Durability** (once committed, a transaction's changes survive even a crash).
+
+### Q60. What do `COMMIT`, `ROLLBACK`, and `SAVEPOINT` do?
+**Answer:** `COMMIT` permanently saves all changes made in the current transaction. `ROLLBACK` undoes all changes since the transaction began (or since a savepoint). `SAVEPOINT` marks a point within a transaction you can roll back to, without undoing the entire transaction.
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+SAVEPOINT after_debit;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+-- if something goes wrong:
+ROLLBACK TO after_debit;
+COMMIT;
+```
+
+### Q61. What are SQL transaction isolation levels (name them)?
+**Answer:** From weakest to strongest isolation: **Read Uncommitted**, **Read Committed**, **Repeatable Read**, and **Serializable**. Higher isolation prevents more types of concurrency anomalies but generally reduces throughput due to more locking/checking.
+```sql
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+```
+
+### Q62. What is `ROW_NUMBER()`, and what problem does it solve?
+**Answer:** `ROW_NUMBER()` is a window function that assigns a unique, sequential number to each row within a result set (or within groups defined by `PARTITION BY`) — commonly used for pagination, deduplication, or "top N per group" queries.
+```sql
+SELECT name, department, salary,
+  ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) AS rnk
+FROM employees;
+```
+
+### Q63. What's the difference between `RANK()` and `DENSE_RANK()`?
+**Answer:** Both assign a rank to rows based on ordering, and both give tied rows the same rank. The difference is what happens after a tie: `RANK()` skips the next rank number(s) (e.g., 1, 2, 2, 4), while `DENSE_RANK()` doesn't skip any (e.g., 1, 2, 2, 3).
+```sql
+SELECT name, score,
+  RANK() OVER (ORDER BY score DESC) AS rnk,
+  DENSE_RANK() OVER (ORDER BY score DESC) AS dense_rnk
+FROM contestants;
+```
+
+### Q64. What is a CTE (Common Table Expression), and what's its main benefit?
+**Answer:** A CTE, defined with `WITH`, is a named, temporary result set you can reference within a single query — like a readable, reusable "variable" for a subquery. It makes complex queries much easier to read and maintain than deeply nested subqueries.
+```sql
+WITH high_value_orders AS (
+  SELECT * FROM orders WHERE amount > 1000
+)
+SELECT customer_id, COUNT(*) FROM high_value_orders GROUP BY customer_id;
+```
+
+### Q65. What is a stored procedure?
+**Answer:** A stored procedure is a precompiled, named block of SQL (with optional parameters and control-flow logic like loops/conditionals) stored in the database itself and invoked with `CALL`. It's useful for encapsulating complex, multi-step business logic close to the data.
+```sql
+CREATE PROCEDURE GetUserOrders(IN userId INT)
+BEGIN
+  SELECT * FROM orders WHERE user_id = userId;
+END;
+
+CALL GetUserOrders(5);
+```
+
+### Q66. What's the difference between a stored procedure and a function?
+**Answer:** A function must return a single value (or table) and can be used directly inside a `SELECT` statement's expressions; it generally can't perform side-effecting operations like `INSERT`/`UPDATE` in most databases. A stored procedure can perform any operations, may or may not return a value, and is invoked with `CALL` rather than embedded in a query.
+
+### Q67. What is a trigger?
+**Answer:** A trigger is a piece of code that automatically runs in response to a specific event (`INSERT`, `UPDATE`, `DELETE`) on a table, either before or after that event — useful for enforcing business rules, auditing changes, or keeping denormalized data in sync.
+```sql
+CREATE TRIGGER before_order_insert
+BEFORE INSERT ON orders
+FOR EACH ROW
+SET NEW.created_at = NOW();
+```
+
+### Q68. What does `ON DELETE CASCADE` do on a foreign key?
+**Answer:** It automatically deletes child rows when the referenced parent row is deleted, keeping referential integrity without you having to manually delete children first. Alternatives include `ON DELETE SET NULL` (nulls out the reference) and `ON DELETE RESTRICT` (blocks the delete if children exist, the default in most databases).
+```sql
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  user_id INT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+### Q69. What is the difference between a clustered and non-clustered index?
+**Answer:** A clustered index determines the **physical order** in which table rows are stored on disk — a table can have only one (often the primary key). A non-clustered index is a separate structure that stores pointers back to the actual rows, and a table can have many of them.
+
+### Q70. What is the logical order in which parts of a SQL query are conceptually processed?
+**Answer:** Roughly: `FROM` → `JOIN` → `WHERE` → `GROUP BY` → `HAVING` → `SELECT` → `DISTINCT` → `ORDER BY` → `LIMIT`. This is why you can't reference a `SELECT` alias in a `WHERE` clause (it hasn't been computed yet), but you often can in `ORDER BY` (it runs after `SELECT`).
+
+### Q71. What does `EXPLAIN` (or `EXPLAIN ANALYZE`) show you?
+**Answer:** `EXPLAIN` shows the query execution plan the database engine intends to use — which indexes (if any) it will use, the order tables are joined in, and estimated row counts. `EXPLAIN ANALYZE` actually runs the query and shows real timing/row counts alongside the plan, which is more reliable for diagnosing slow queries.
+```sql
+EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 5;
+```
+
+### Q72. What do `INTERSECT` and `EXCEPT`/`MINUS` do?
+**Answer:** `INTERSECT` returns only rows present in **both** query results. `EXCEPT` (PostgreSQL/SQL Server) or `MINUS` (Oracle) returns rows in the first query's results that are **not** in the second's — like a set subtraction.
+```sql
+SELECT email FROM newsletter_subscribers
+EXCEPT
+SELECT email FROM unsubscribed_users;
+```
+
+### Q73. How do you "pivot" rows into columns in SQL?
+**Answer:** Most databases don't have a universal simple pivot keyword (SQL Server has `PIVOT`); the common portable approach uses conditional aggregation with `CASE WHEN` inside aggregate functions.
+```sql
+SELECT
+  product_id,
+  SUM(CASE WHEN quarter = 'Q1' THEN sales ELSE 0 END) AS q1_sales,
+  SUM(CASE WHEN quarter = 'Q2' THEN sales ELSE 0 END) AS q2_sales
+FROM quarterly_sales
+GROUP BY product_id;
+```
+
+### Q74. How do you concatenate/aggregate multiple rows' values into one string per group?
+**Answer:** MySQL uses `GROUP_CONCAT()`; PostgreSQL uses `STRING_AGG()`. Both combine values from multiple rows within a group into a single delimited string.
+```sql
+-- PostgreSQL
+SELECT customer_id, STRING_AGG(product_name, ', ') AS items
+FROM order_items GROUP BY customer_id;
+```
+
+### Q75. How do you calculate the difference between two dates, or add/subtract time?
+**Answer:** Syntax varies by engine: PostgreSQL supports direct date arithmetic and `INTERVAL`; MySQL uses `DATEDIFF()` and `DATE_ADD()`/`DATE_SUB()`.
+```sql
+-- PostgreSQL
+SELECT order_date + INTERVAL '7 days' AS due_date FROM orders;
+SELECT delivery_date - order_date AS days_taken FROM orders;
+```
+
+### Q76. What's the practical difference between `NULL` and an empty string `''`?
+**Answer:** `NULL` means "no value/unknown," while `''` is an actual, defined value — an empty string. `NULL = ''` is not true (comparisons with `NULL` return unknown), and `COUNT(column)` skips `NULL`s but counts empty strings. Treating them as interchangeable is a common source of bugs.
+
+### Q77. How does storage differ between `DECIMAL`/`NUMERIC` and `FLOAT`/`DOUBLE`, and why does it matter for money?
+**Answer:** `DECIMAL`/`NUMERIC` stores exact values with a fixed precision/scale, avoiding rounding errors. `FLOAT`/`DOUBLE` store approximate binary floating-point values, which can introduce small rounding errors (e.g., `0.1 + 0.2` not exactly equaling `0.3`) — which is why money/financial values should always use `DECIMAL`, never `FLOAT`.
+
+### Q78. What is a natural key vs. a surrogate key?
+**Answer:** A natural key is a column with real-world business meaning that could uniquely identify a row (like an email or SSN). A surrogate key is an artificial, meaningless identifier (like an auto-incrementing integer or UUID) generated purely for internal use — usually preferred because natural keys can change or turn out not to be as unique as assumed.
+
+### Q79. What's the difference between `INNER JOIN` results and simply listing multiple tables in `FROM` separated by commas with a `WHERE` condition?
+**Answer:** They're functionally equivalent (the comma syntax is an older, implicit join style), but explicit `JOIN ... ON` syntax is strongly preferred today because it clearly separates join logic from filtering logic, is less error-prone (forgetting the join condition with comma syntax silently produces a cross join), and is easier to read in complex multi-table queries.
+
+### Q80. How would you find duplicate rows in a table?
+**Answer:** Group by the column(s) that should be unique, and filter with `HAVING COUNT(*) > 1` to see which values appear more than once.
+```sql
+SELECT email, COUNT(*) FROM users
+GROUP BY email
+HAVING COUNT(*) > 1;
+```
+
+### Q81. How would you delete duplicate rows while keeping one copy?
+**Answer:** A common approach uses a window function to number duplicates, then deletes all but the first occurrence of each group.
+```sql
+DELETE FROM users
+WHERE id NOT IN (
+  SELECT MIN(id) FROM users GROUP BY email
+);
+```
+
+### Q82. What is a temporary table, and when would you use one?
+**Answer:** A temporary table exists only for the duration of a session or transaction and is automatically dropped afterward — useful for staging intermediate results in a complex multi-step process without cluttering the permanent schema.
+```sql
+CREATE TEMPORARY TABLE temp_high_spenders AS
+SELECT customer_id FROM orders GROUP BY customer_id HAVING SUM(amount) > 5000;
+```
+
+### Q83. What is dynamic SQL, and what risk does it carry?
+**Answer:** Dynamic SQL builds and executes a SQL statement as a string constructed at runtime (e.g., to make a table name variable). The major risk is SQL injection if any part of that string comes from unsanitized user input — always use parameterized queries/prepared statements instead of directly concatenating user input into SQL strings.
+
+### Q84. How do you prevent SQL injection?
+**Answer:** Use parameterized queries (a.k.a. prepared statements), where user input is passed as bound parameters rather than concatenated directly into the SQL string — the database driver handles safe escaping automatically, so malicious input can't alter the query's structure.
+```javascript
+// Node.js example, using a parameterized query
+db.query("SELECT * FROM users WHERE email = ?", [userInputEmail]);
+```
+
+### Q85. What is a composite index, and how does column order affect its usefulness?
+**Answer:** A composite (multi-column) index is built on two or more columns together. It's most useful for queries filtering on a "left-to-right prefix" of those columns — an index on `(last_name, first_name)` speeds up filtering by `last_name` alone or by both, but not by `first_name` alone.
+```sql
+CREATE INDEX idx_name ON users(last_name, first_name);
+```
+
+### Q86. What's the difference between `UNIQUE` constraint and a `UNIQUE INDEX`?
+**Answer:** In most databases they're effectively the same thing — creating a `UNIQUE` constraint automatically creates a unique index to enforce it. The distinction is mostly conceptual: a constraint describes a business rule, while an index is the mechanism used to enforce/enable it efficiently.
+
+### Q87. How would you find the second-highest salary in an `employees` table?
+**Answer:** A common, portable approach uses a subquery with `MAX()` excluding the top value; alternatively, `LIMIT`/`OFFSET` after sorting, or a window function like `DENSE_RANK()`.
+```sql
+SELECT MAX(salary) FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+```
+
+### Q88. What is the difference between `UNION` and a `JOIN`?
+**Answer:** `JOIN` combines columns from two tables **side by side** based on a matching condition, producing wider rows. `UNION` stacks rows from two queries **on top of each other**, producing a combined list of rows — the queries must return the same number and type of columns.
+
+### Q89. What does `GENERATED ALWAYS AS (...) STORED` (a computed/generated column) do?
+**Answer:** It defines a column whose value is automatically calculated from other columns in the same row, either computed on the fly when read (virtual) or physically stored and updated whenever the source columns change (stored) — avoiding the need to keep a derived value in sync manually in application code.
+```sql
+ALTER TABLE orders ADD COLUMN total DECIMAL(10,2)
+  GENERATED ALWAYS AS (price * quantity) STORED;
+```
+
+### Q90. What is the difference between `LEFT JOIN ... WHERE right.col IS NULL` and `NOT EXISTS`, for finding "rows in A with no match in B"?
+**Answer:** Both are common patterns to find unmatched rows and often produce identical results and similar performance under a good optimizer, but `NOT EXISTS` is generally considered clearer in intent and handles certain edge cases (like `NULL`s in the join column) more predictably than the `LEFT JOIN`+`IS NULL` pattern.
+```sql
+SELECT c.name FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);
+```
+
+### Q91. What are check constraints good for beyond simple range checks?
+**Answer:** They can enforce more complex business rules directly at the database level — like ensuring a discount percentage stays between 0 and 100, or that an end date is after a start date — providing a safety net even if application code has a bug.
+```sql
+ALTER TABLE bookings ADD CONSTRAINT valid_dates CHECK (end_date > start_date);
+```
+
+### Q92. What is the difference between `TRUNCATE` and `DELETE` in terms of triggers and transaction behavior?
+**Answer:** `DELETE` fires row-level triggers (like `AFTER DELETE`) for each row removed and can typically be rolled back within a transaction. `TRUNCATE` generally does **not** fire row-level triggers, and in some databases it can't be rolled back once committed (or requires wrapping in a transaction explicitly, depending on the engine) — because it works by deallocating data pages rather than deleting rows individually.
+
+### Q93. What is the purpose of the `WITH CHECK OPTION` clause on a view?
+**Answer:** It ensures that any `INSERT`/`UPDATE` performed through an updatable view must still satisfy the view's own `WHERE` condition — preventing you from inserting/updating a row through the view that the view itself wouldn't then be able to show you.
+```sql
+CREATE VIEW active_users AS
+SELECT * FROM users WHERE status = 'active'
+WITH CHECK OPTION;
+```
+
+### Q94. How would you find rows in table A that don't exist in table B, and vice versa, in one query?
+**Answer:** A `FULL OUTER JOIN` combined with checking for `NULL`s on either side identifies rows unmatched in either direction.
+```sql
+SELECT a.*, b.*
+FROM tableA a
+FULL OUTER JOIN tableB b ON a.id = b.a_id
+WHERE a.id IS NULL OR b.a_id IS NULL;
+```
+
+### Q95. What's the difference between scalar subqueries and table subqueries?
+**Answer:** A scalar subquery returns exactly one row and one column (a single value), and can be used anywhere a literal value could go (like in `SELECT` or a comparison). A table subquery returns multiple rows/columns and is used in `FROM` or with operators like `IN`/`EXISTS`.
+```sql
+SELECT name, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) AS order_count
+FROM customers c;
+```
+
+### Q96. What does `INSERT ... ON DUPLICATE KEY UPDATE` (MySQL) / `ON CONFLICT` (PostgreSQL) do?
+**Answer:** This is SQL's version of an "upsert" — it attempts an insert, but if it would violate a unique/primary key constraint, it updates the existing row instead of throwing an error.
+```sql
+-- PostgreSQL
+INSERT INTO inventory (product_id, stock) VALUES (1, 10)
+ON CONFLICT (product_id) DO UPDATE SET stock = inventory.stock + 10;
+```
+
+### Q97. What is the difference between an inner subquery in `WHERE` vs. rewriting the same logic as a `JOIN`?
+**Answer:** They often express the same intent, but a `JOIN` typically lets the optimizer consider more efficient execution plans and lets you select columns from both tables at once. A subquery (especially `EXISTS`/`IN`) is often clearer when you just need to filter based on related data without actually returning any columns from the other table.
+
+### Q98. What does the `OFFSET`/`FETCH` syntax do, and how does it differ across databases?
+**Answer:** It's the SQL-standard way to paginate results, skipping a number of rows and returning a fixed number after. MySQL/PostgreSQL commonly use `LIMIT n OFFSET m`; SQL Server/Oracle use `OFFSET m ROWS FETCH NEXT n ROWS ONLY`.
+```sql
+SELECT * FROM products ORDER BY id OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY; -- SQL Server/Oracle
+```
+
+### Q99. Why is `SELECT *` generally discouraged in production application code?
+**Answer:** It fetches every column even if you only need a few (wasting bandwidth/memory), can silently break application code if columns are later added/reordered/removed, prevents the database from using a covering index, and makes queries harder to reason about when reviewing code.
+
+### Q100. What's the difference between a schema and a database (as terms), and does it vary by RDBMS?
+**Answer:** In PostgreSQL/Oracle, a "schema" is a namespace within a database that groups related tables (a database can contain multiple schemas). In MySQL, "schema" and "database" are actually treated as synonyms — there's no separate namespace layer inside a database, which often confuses developers moving between the two systems.
+
+## 2.3 Advanced (Q101–Q150)
+
+### Q101. What do `LAG()` and `LEAD()` window functions do?
+**Answer:** `LAG()` retrieves a value from a **previous** row relative to the current row (within an ordered partition), and `LEAD()` retrieves a value from a **following** row — extremely useful for comparing a row to the one before/after it, like calculating month-over-month growth.
+```sql
+SELECT month, revenue,
+  LAG(revenue) OVER (ORDER BY month) AS prev_month_revenue,
+  revenue - LAG(revenue) OVER (ORDER BY month) AS growth
+FROM monthly_sales;
+```
+
+### Q102. What does `PARTITION BY` do inside a window function?
+**Answer:** `PARTITION BY` divides the result set into groups (partitions), and the window function is applied **independently within each partition** — similar to `GROUP BY`, but without collapsing rows into one per group; each row keeps its own identity alongside the computed window value.
+```sql
+SELECT department, name, salary,
+  AVG(salary) OVER (PARTITION BY department) AS dept_avg
+FROM employees;
+```
+
+### Q103. What is a window frame clause (`ROWS BETWEEN ...`), and why would you need it?
+**Answer:** A frame clause defines exactly which rows, relative to the current row within its partition, a window function should consider — like "the current row and the 2 rows before it" for a rolling average. Without specifying it, the default frame behavior can vary depending on whether you use `ORDER BY` in the window.
+```sql
+SELECT day, revenue,
+  AVG(revenue) OVER (ORDER BY day ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS rolling_avg_3day
+FROM daily_sales;
+```
+
+### Q104. What is a recursive CTE, and what's a classic use case?
+**Answer:** A recursive CTE repeatedly executes a query, each time building on the previous result, until no new rows are produced — used for hierarchical/graph-like data such as an org chart, category tree, or finding all paths in a graph.
+```sql
+WITH RECURSIVE org_chart AS (
+  SELECT id, name, manager_id, 1 AS level
+  FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.id, e.name, e.manager_id, oc.level + 1
+  FROM employees e
+  JOIN org_chart oc ON e.manager_id = oc.id
+)
+SELECT * FROM org_chart;
+```
+
+### Q105. What is query selectivity, and why does it matter for indexing decisions?
+**Answer:** Selectivity measures how much an index/condition narrows down the result set — a highly selective column (like an email, mostly unique) benefits greatly from an index, while a low-selectivity column (like a boolean `is_active` with mostly one value) often doesn't, since the optimizer may decide a full scan is cheaper than jumping around via the index anyway.
+
+### Q106. What is a covering index?
+**Answer:** A covering index contains **every** column a query needs (in its filter, sort, and selected output), so the database can answer the query entirely from the index itself without a separate lookup into the actual table rows ("bookmark lookup") — a major performance win for read-heavy queries.
+```sql
+CREATE INDEX idx_covering ON orders(customer_id, status, amount);
+-- fully covers:
+SELECT status, amount FROM orders WHERE customer_id = 5;
+```
+
+### Q107. How do you read a typical execution plan to spot a performance problem?
+**Answer:** Look for full table scans (`Seq Scan` in PostgreSQL, `ALL` in MySQL) on large tables where an index scan would be expected, high estimated vs. actual row count mismatches (stale statistics), expensive sort operations, and nested loop joins on large unindexed tables — all common red flags.
+
+### Q108. What is a query hint, and when might you need one?
+**Answer:** A query hint is a directive that overrides the optimizer's default choice — like forcing a specific index or join order — used sparingly, typically when you've confirmed (via `EXPLAIN`) that the optimizer is consistently choosing a suboptimal plan due to stale statistics or an edge case it doesn't estimate well.
+```sql
+SELECT /*+ INDEX(orders idx_customer_id) */ * FROM orders WHERE customer_id = 5; -- Oracle-style hint
+```
+
+### Q109. What is a deadlock, and how do databases typically resolve one?
+**Answer:** A deadlock occurs when two (or more) transactions each hold a lock the other is waiting for, so neither can proceed. Most database engines automatically detect this cycle and resolve it by killing one of the transactions (rolling it back) so the other can continue — the "losing" transaction's application code should catch this and retry.
+
+### Q110. What is a dirty read, a non-repeatable read, and a phantom read?
+**Answer:** A **dirty read** is seeing another transaction's uncommitted changes (possible only at the weakest isolation level). A **non-repeatable read** is re-reading the same row within a transaction and getting a different value because another transaction committed a change in between. A **phantom read** is re-running the same query and getting a different **set of rows** because another transaction inserted/deleted rows matching your condition in between.
+
+### Q111. How do the four standard isolation levels map to preventing these anomalies?
+**Answer:** **Read Uncommitted**: prevents nothing. **Read Committed**: prevents dirty reads. **Repeatable Read**: also prevents non-repeatable reads (and, in MySQL's InnoDB implementation specifically, also prevents phantom reads via gap locking). **Serializable**: prevents all three, behaving as if transactions ran one at a time.
+
+### Q112. What is MVCC (Multi-Version Concurrency Control), conceptually?
+**Answer:** Instead of blocking readers while a writer modifies data, MVCC keeps multiple versions of a row and gives each transaction a consistent "snapshot" view as of when it started. Readers don't block writers and writers don't block readers, which is why databases like PostgreSQL and MySQL's InnoDB can offer good concurrency without excessive locking for reads.
+
+### Q113. How is transaction isolation actually implemented differently between PostgreSQL and MySQL InnoDB, at a high level?
+**Answer:** Both use MVCC, but the details differ: PostgreSQL keeps old row versions directly in the table (cleaned up later by `VACUUM`), while InnoDB keeps old versions in a separate "undo log" that's used to reconstruct earlier snapshots on demand — both achieve similar snapshot-isolation behavior but with different storage/cleanup mechanics.
+
+### Q114. What is table partitioning, and what's the difference between range, list, and hash partitioning?
+**Answer:** Partitioning splits one large logical table into smaller physical pieces, transparently to most queries, for performance and manageability. **Range** partitioning splits by value ranges (e.g., orders by month). **List** partitioning splits by explicit value sets (e.g., region = 'US'/'EU'/'APAC'). **Hash** partitioning distributes rows evenly using a hash function, useful when there's no natural range/list split.
+```sql
+-- PostgreSQL range partitioning
+CREATE TABLE orders (id INT, order_date DATE, amount DECIMAL) PARTITION BY RANGE (order_date);
+CREATE TABLE orders_2026 PARTITION OF orders FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+```
+
+### Q115. How is partitioning different from sharding?
+**Answer:** Partitioning splits a table into pieces that still live on the **same** database server/instance (mainly for query performance and maintenance). Sharding splits data across **multiple, separate database servers** (for horizontal scalability beyond what one machine can handle) — they solve related but distinct problems, and can be combined.
+
+### Q116. What is database replication, and what's the difference between synchronous and asynchronous replication?
+**Answer:** Replication keeps copies of the same data on multiple database servers. **Synchronous** replication waits for the replica to confirm it received the write before acknowledging success to the client — stronger consistency, but higher write latency. **Asynchronous** replication acknowledges the write immediately and copies it to replicas in the background — lower latency, but replicas can briefly lag and a crash could lose the most recent unreplicated writes.
+
+### Q117. What is a materialized view, and how is it different from a regular view?
+**Answer:** A regular view re-runs its query every time you select from it. A materialized view **stores** the query's result physically on disk, like a cached table, and must be explicitly refreshed to reflect underlying data changes — trading some data freshness for much faster reads on expensive queries.
+```sql
+CREATE MATERIALIZED VIEW monthly_revenue AS
+SELECT DATE_TRUNC('month', order_date) AS month, SUM(amount) AS total
+FROM orders GROUP BY 1;
+
+REFRESH MATERIALIZED VIEW monthly_revenue;
+```
+
+### Q118. What is the OLTP vs. OLAP distinction?
+**Answer:** **OLTP** (Online Transaction Processing) systems handle many small, fast read/write transactions (like an e-commerce checkout) and are optimized for row-based access and consistency. **OLAP** (Online Analytical Processing) systems handle complex analytical queries over large volumes of historical data (like a sales dashboard) and are often optimized with column-based storage for scanning/aggregating fewer columns across many rows.
+
+### Q119. What is a star schema, and what is a snowflake schema?
+**Answer:** Both are data warehouse modeling patterns: a **star schema** has one central "fact" table (like sales transactions) surrounded by directly-connected, denormalized "dimension" tables (like product, customer, date). A **snowflake schema** takes it further by normalizing those dimension tables into sub-dimensions (e.g., splitting "product" into "product" and "product_category") — trading some query simplicity for reduced redundancy.
+
+### Q120. Should you index foreign key columns, and why isn't it always automatic?
+**Answer:** Yes, it's generally a best practice — foreign key columns are frequently used in joins, and without an index, joining or deleting from the parent table (which needs to check for referencing children) can require a full scan of the child table. Many databases (like MySQL/InnoDB) auto-create an index for foreign keys, but PostgreSQL notably does **not** — you must create it yourself.
+```sql
+CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+```
+
+### Q121. What is query plan caching, and can a cached plan become stale/wrong?
+**Answer:** Databases often cache the execution plan for a parameterized query to avoid re-optimizing it on every execution. This can become suboptimal ("parameter sniffing" issues) if the plan was chosen based on a particular parameter value's data distribution but later executions use very different values that would benefit from a different plan.
+
+### Q122. What is the difference between a nested loop join, a hash join, and a merge join?
+**Answer:** A **nested loop join** iterates through one table and, for each row, searches the other (efficient for small tables or when an index supports the inner lookup). A **hash join** builds an in-memory hash table from the smaller table, then probes it with the larger table's rows (efficient for large, unsorted, unindexed joins). A **merge join** requires both inputs sorted on the join key, then merges them in a single pass (efficient when data is already sorted, e.g., via an index).
+
+### Q123. How does the optimizer typically decide which join algorithm to use?
+**Answer:** It estimates the cost of each viable strategy based on table sizes, available indexes, data statistics/distribution, and available memory, then picks the plan with the lowest estimated total cost — this is why keeping table statistics up to date (via `ANALYZE`/auto-stats) is important for good query plans.
+
+### Q124. What is BCNF (Boyce-Codd Normal Form), and how does it differ from 3NF?
+**Answer:** BCNF is a stricter version of 3NF: for every functional dependency (X determines Y), X must be a candidate key (a key or a column that could be a key). 3NF has a narrow exception that BCNF closes — some 3NF tables with overlapping composite candidate keys can still have subtle redundancy that BCNF eliminates.
+
+### Q125. What is 4NF, briefly?
+**Answer:** 4NF addresses "multi-valued dependencies" — situations where a table incorrectly combines two independent, multi-valued facts about an entity in one table (e.g., a table listing an employee's skills and their children's names together, generating a confusing cross-product of rows). 4NF requires splitting these into separate tables.
+
+### Q126. When is it acceptable to intentionally denormalize a normalized schema, and what's the trade-off you're accepting?
+**Answer:** It's acceptable when read performance/query simplicity clearly outweighs the maintenance cost — like in reporting/analytics systems, or caching a frequently-joined value directly on a hot table. The trade-off: you now have data duplicated in multiple places, so your application (or triggers) must keep those copies in sync, risking inconsistency if that logic has bugs.
+
+### Q127. What is the difference between horizontal and vertical partitioning of a table?
+**Answer:** **Horizontal** partitioning splits a table by **rows** (e.g., orders from 2025 vs. 2026 in separate partitions) — every partition has the same columns. **Vertical** partitioning splits a table by **columns** (e.g., putting rarely-used large text fields in a separate table from frequently-accessed core fields) — reducing the size of "hot" rows for common queries.
+
+### Q128. What is the N+1 query problem, and how do you fix it?
+**Answer:** It happens when code runs one query to get a list of N items, then loops through them running a separate query for each item's related data — resulting in N+1 total queries instead of 2. The fix is usually to batch it into a single query using a `JOIN` or a single `WHERE ... IN (...)` query instead of querying inside a loop.
+```sql
+-- Bad: 1 query for orders, then N queries for each order's customer
+-- Good: one JOIN
+SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.id;
+```
+
+### Q129. How would you optimize a bulk insert of millions of rows?
+**Answer:** Batch inserts into chunks rather than one row at a time (or use multi-row `INSERT ... VALUES (...), (...), ...` syntax, or a native bulk-load utility like `COPY` in PostgreSQL or `LOAD DATA INFILE` in MySQL), temporarily drop/disable non-essential indexes and re-create them after the load, and wrap batches in explicit transactions to reduce per-statement commit overhead.
+```sql
+-- PostgreSQL bulk load
+COPY orders FROM '/path/to/orders.csv' WITH (FORMAT csv, HEADER true);
+```
+
+### Q130. What is a database migration, and what tools/approaches are commonly used to manage them?
+**Answer:** A migration is a version-controlled script that incrementally changes the database schema (adding tables/columns, etc.) in a repeatable, tracked way across environments. Tools like Flyway, Liquibase, or framework-specific tools (e.g., Sequelize/TypeORM/Django migrations) track which migrations have run and apply new ones in order.
+
+### Q131. What is a "zero-downtime" schema migration strategy, e.g., for renaming a column on a live, high-traffic table?
+**Answer:** A common safe pattern: (1) add the new column alongside the old one, (2) deploy application code that writes to both, (3) backfill existing rows into the new column in batches, (4) deploy code that reads from the new column only, (5) once confident, drop the old column — avoiding a risky single atomic rename that could break running application code mid-deploy.
+
+### Q132. What's the risk of running `ALTER TABLE ... ADD COLUMN` with a default value on a huge table, on some databases?
+**Answer:** On older versions of some databases (and depending on the type of default), this could require rewriting every existing row to add the default value, locking the table for a long time. Modern PostgreSQL (11+) and MySQL (8+) have optimized this for constant defaults to be an instant, metadata-only change — but it's still worth verifying behavior for your specific database version before running it on a huge production table.
+
+### Q133. How would you benchmark whether a schema/query change actually improved performance?
+**Answer:** Test against a realistic copy of production-scale data (not a tiny dev dataset, since query plans can behave very differently at scale), use `EXPLAIN ANALYZE` to compare actual execution time and row counts before/after, and ideally run a load test simulating realistic concurrent traffic rather than a single isolated query.
+
+### Q134. What is a distributed transaction, and what problem does the Two-Phase Commit (2PC) protocol solve for it?
+**Answer:** A distributed transaction spans multiple, separate databases/services that each need to commit or roll back together atomically. 2PC coordinates this: in phase one, a coordinator asks every participant to "prepare" (persist changes but not finalize); if all agree, phase two tells everyone to commit — ensuring all-or-nothing behavior even though the systems are physically separate.
+
+### Q135. What is the Saga pattern, and how does it differ from 2PC?
+**Answer:** Instead of one atomic distributed transaction, a Saga breaks a business process into a sequence of local transactions, each in its own service/database, with a defined "compensating" action to undo each step if a later step fails. It avoids 2PC's tight coupling and blocking locks across services, at the cost of only eventual (not immediate) consistency during the process.
+
+### Q136. What is eventual consistency, and where does it commonly show up in real systems using SQL databases?
+**Answer:** Eventual consistency means that, given no new updates, all replicas/copies of data will eventually converge to the same value — but there may be a window where different reads return different (stale) results. It commonly shows up when reading from asynchronous read replicas shortly after a write to the primary.
+
+### Q137. What is row-level security (RLS), and which databases support it natively?
+**Answer:** Row-level security lets the database itself restrict which rows a given user/role can see or modify, based on policies — enforced automatically regardless of the query, rather than relying on every application query to remember to add a filter. PostgreSQL has native RLS support via `CREATE POLICY`.
+```sql
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY customer_orders ON orders
+  USING (customer_id = current_setting('app.current_customer_id')::INT);
+```
+
+### Q138. What is the principle of least privilege, applied to database user permissions?
+**Answer:** Each application/user account should only be granted the minimum permissions it actually needs to function — e.g., a reporting service gets read-only `SELECT` access, an application server gets `SELECT`/`INSERT`/`UPDATE` but not `DROP TABLE` — limiting the damage a compromised credential or buggy script could cause.
+```sql
+GRANT SELECT, INSERT, UPDATE ON orders TO app_user;
+REVOKE DELETE ON orders FROM app_user;
+```
+
+### Q139. What are prepared statements, and how do they help both security and performance?
+**Answer:** A prepared statement is parsed and compiled by the database once, with placeholders for parameters, and can then be executed repeatedly with different parameter values without re-parsing/re-optimizing each time — improving performance for repeated queries, while also inherently preventing SQL injection since parameters are never interpreted as SQL syntax.
+
+### Q140. What is connection pooling, and why is it especially important for SQL databases under load?
+**Answer:** Opening a new database connection is relatively expensive (TCP handshake, authentication, memory allocation). A connection pool keeps a set of reusable, already-open connections that application threads borrow and return, avoiding that overhead on every request — critical for handling high concurrency without overwhelming the database with connection churn.
+
+### Q141. What is a read replica, and what kinds of queries should typically be routed to one?
+**Answer:** A read replica is a copy of the database, kept in sync (usually asynchronously) with the primary, used to serve read-only queries and offload traffic from the primary. Reports, analytics, dashboards, and other latency-tolerant reads are good candidates; anything requiring the absolute latest data (like "did my write just succeed") is safer read from the primary.
+
+### Q142. What's the difference between vertical scaling and read replicas as strategies for handling increased read load?
+**Answer:** Vertical scaling (bigger server) increases the capacity of a single database instance but has diminishing returns and a hard ceiling, plus doesn't help with hardware failure resilience. Read replicas horizontally distribute *read* traffic across multiple machines and add redundancy, but don't help scale *write* throughput, since all writes still go through the primary.
+
+### Q143. How would you design indexing for a table that's both heavily written to and heavily read from, in a way that balances both needs?
+**Answer:** Be deliberate rather than indexing everything: only add indexes that support real, frequent, high-value query patterns (verified via query logs/`EXPLAIN`), favor a smaller number of well-chosen composite indexes over many single-column ones, and periodically audit for unused indexes to remove, since every additional index adds write overhead.
+
+### Q144. What is the purpose of updating table statistics (e.g., `ANALYZE` in PostgreSQL), and what happens if they go stale?
+**Answer:** The query optimizer relies on statistics (row counts, value distributions) to estimate the cost of different execution plans. If statistics are stale (e.g., after a huge bulk load or delete), the optimizer can badly misjudge selectivity and choose a poor plan — like a full table scan when an index would've been much faster, or vice versa.
+```sql
+ANALYZE orders;
+```
+
+### Q145. What's the difference between a full table scan and an index range scan, performance-wise, and when is a full scan actually the better choice?
+**Answer:** A full table scan reads every row; an index range scan jumps to and reads only matching rows via the index. A full scan can actually be *faster* when a large percentage of the table's rows match the query (low selectivity) — reading sequentially from disk can outperform many scattered index lookups in that case, which is why the optimizer sometimes correctly avoids an available index.
+
+### Q146. How would you design a schema to efficiently support both a `search by tag` feature and storing arbitrary-length lists of tags per item in a strictly relational (3NF) database?
+**Answer:** Create a separate `tags` table (id, name) and a many-to-many junction table `item_tags` (item_id, tag_id) rather than storing tags as a comma-separated string in one column — this keeps tags queryable/indexable and avoids the anomalies of storing multiple values in a single field (violating 1NF).
+```sql
+CREATE TABLE item_tags (item_id INT, tag_id INT, PRIMARY KEY (item_id, tag_id));
+```
+
+### Q147. What is the difference between `GRANT`/`REVOKE` on a table versus on a view, in terms of controlling access?
+**Answer:** Granting access to a view (rather than the underlying table directly) lets you expose only specific columns/rows to a role without giving them any access to the full underlying table — a common way to implement column-level or row-level restrictions in databases without native RLS support.
+
+### Q148. What's the danger of using `AUTO_INCREMENT`/`SERIAL` primary keys as a sharding key in a sharded/distributed setup?
+**Answer:** Sequential IDs tend to concentrate new writes onto whichever shard is currently "current" for the highest ID range, creating a write hotspot instead of evenly distributing load — a globally unique, more randomly-distributed key (like a UUID or a hashed value) is often preferred for sharded systems.
+
+### Q149. What is idempotency in the context of retrying a failed SQL write operation, and how do you design for it?
+**Answer:** An idempotent operation produces the same end result no matter how many times it's safely retried — important because a client can't always tell if a failed request actually succeeded on the server before the connection dropped. Designing for it usually means using a unique business key with `INSERT ... ON CONFLICT DO NOTHING/UPDATE` (upsert) instead of a plain `INSERT`, so retries don't create duplicate rows.
+
+### Q150. How would you design an efficient "audit log" / history table for tracking changes to a critical table over time?
+**Answer:** A common pattern: a separate `table_name_history` table with the same columns as the original plus `changed_at`, `changed_by`, and `operation` (INSERT/UPDATE/DELETE) columns, populated automatically via triggers (or application-level logic) on every write — giving a full change history without cluttering the primary table.
+```sql
+CREATE TRIGGER orders_audit
+AFTER UPDATE ON orders
+FOR EACH ROW
+INSERT INTO orders_history (order_id, old_status, new_status, changed_at)
+VALUES (OLD.id, OLD.status, NEW.status, NOW());
+```
+
+## 2.4 Super-Advanced (Q151–Q200)
+
+### Q151. How does a cost-based query optimizer decide on an execution plan internally?
+**Answer:** It enumerates multiple candidate execution plans (different join orders, algorithms, and index choices), estimates the "cost" of each using statistics (row counts, data distribution histograms, index selectivity) and a cost model (CPU + I/O estimates), and picks the plan with the lowest estimated total cost — it doesn't guarantee the *true* optimal plan, only the best one it can estimate within reasonable planning time.
+
+### Q152. What is a histogram in database statistics, and why is it more useful than just knowing a column's min/max/average?
+**Answer:** A histogram breaks a column's value range into buckets and records the approximate frequency of values in each bucket, capturing the actual **distribution** (including skew) rather than just summary numbers. This lets the optimizer accurately estimate selectivity for a specific value or range — critical for columns where data isn't evenly distributed (e.g., most orders have `status = 'completed'`, but very few have `status = 'disputed'`).
+
+### Q153. How does a B+ tree index differ from a plain B-tree, and why do most database indexes use B+ trees specifically?
+**Answer:** In a B+ tree, all actual data (or pointers to rows) is stored only in the leaf nodes, and those leaf nodes are linked together sequentially. This makes range scans (like `BETWEEN` or `ORDER BY`) very efficient — you find the starting point once, then just walk the linked leaves — whereas a plain B-tree stores data in internal nodes too, making a full in-order traversal for range queries less efficient.
+
+### Q154. What is columnar storage, and why does it dramatically speed up analytical (OLAP) queries?
+**Answer:** Instead of storing all columns of a row together (row-oriented, good for OLTP), columnar storage groups each column's values together on disk. Analytical queries typically scan/aggregate only a few columns across millions of rows (like `SUM(revenue)`), so columnar storage lets the engine read only the relevant columns' data, skip irrelevant columns entirely, and compress each column more effectively since similar values sit together.
+
+### Q155. What is a Write-Ahead Log (WAL), and what guarantee does it provide?
+**Answer:** Before modifying actual data pages, the database first writes a record of the intended change to a sequential, append-only log on disk. If the database crashes, it can replay the WAL on restart to redo committed changes that hadn't yet been flushed to the main data files (or undo uncommitted ones) — this is the core mechanism behind the "Durability" guarantee in ACID.
+
+### Q156. What does checkpointing do, and how does it relate to WAL and crash recovery time?
+**Answer:** A checkpoint periodically flushes all recently modified in-memory data pages to disk and records that point in the WAL. On crash recovery, the database only needs to replay WAL entries **since the last checkpoint** (not the entire log history), which bounds recovery time — more frequent checkpoints mean faster recovery but more I/O overhead during normal operation.
+
+### Q157. What is `VACUUM` in PostgreSQL, and why does PostgreSQL's MVCC implementation specifically need it?
+**Answer:** Because PostgreSQL's MVCC keeps old row versions directly in the table when a row is updated/deleted (rather than in a separate undo log like InnoDB), those "dead" old versions accumulate and waste space over time. `VACUUM` reclaims that space (and updates statistics), and without regular vacuuming, tables can bloat significantly and query performance can degrade.
+```sql
+VACUUM ANALYZE orders;
+```
+
+### Q158. What are gap locks and next-key locks in InnoDB, and what problem do they solve?
+**Answer:** In InnoDB's Repeatable Read isolation level, a "gap lock" locks the space **between** index records (not just existing rows), and a "next-key lock" combines a gap lock with a lock on the actual record — together they prevent other transactions from inserting new rows into that gap, which is how InnoDB prevents phantom reads at Repeatable Read (going beyond the SQL standard's minimum requirement for that level).
+
+### Q159. What is a buffer pool, and why is its size one of the most impactful tuning parameters for a SQL database?
+**Answer:** The buffer pool is an in-memory cache of data pages, so frequently accessed data can be read/written without hitting disk. If it's too small relative to your active working set, the database constantly evicts and re-reads pages from disk (much slower); sizing it appropriately (often a large fraction of available server RAM) is one of the single biggest performance levers for a database server.
+
+### Q160. How does query rewriting by the optimizer differ from a query hint you specify manually?
+**Answer:** Query rewriting is the optimizer automatically transforming your query into a logically equivalent but more efficient form (like converting a correlated subquery into a join, or pushing a filter down before a join) without you asking. A hint is you manually overriding the optimizer's decision-making for a specific part of the plan — rewriting is automatic and transparent; hints are explicit and should be used sparingly.
+
+### Q161. What is a "distributed SQL" database (like CockroachDB, Google Spanner, or YugabyteDB), and how does it differ from traditional sharding?
+**Answer:** These databases natively distribute data and provide strongly consistent, ACID transactions **across nodes automatically**, using consensus protocols (like Raft or Paxos) under the hood — application code writes plain SQL as if talking to a single database, without manually managing shard keys or a separate routing layer, unlike traditional application-level sharding.
+
+### Q162. How does Google Spanner achieve strong (external) consistency across globally distributed nodes?
+**Answer:** Spanner uses "TrueTime," a globally synchronized clock API (backed by GPS and atomic clocks) that provides tight, bounded uncertainty on the current time across all nodes. By waiting out that uncertainty window before committing, Spanner can assign globally meaningful timestamps to transactions and guarantee external consistency without needing a single centralized coordinator for every transaction.
+
+### Q163. What consensus protocols (like Raft) are commonly used to keep distributed SQL replicas consistent, and why is this needed instead of simple primary-replica async replication?
+**Answer:** Raft (or similar protocols like Paxos) requires a **majority** of nodes to agree before a write is considered committed, which tolerates node failures without losing committed data or risking split-brain scenarios — unlike simple async replication, where an unreplicated write on a crashed primary can simply be lost.
+
+### Q164. How would you choose a sharding key for a distributed SQL system serving a global multi-tenant SaaS application?
+**Answer:** A common strong choice is `tenant_id` (or a hash of it) as (part of) the shard key, since most queries in a multi-tenant app naturally filter by tenant — this keeps each tenant's data (and their typical queries/joins) co-located on the same shard, avoiding expensive cross-shard joins for routine operations, while still spreading different tenants across shards for scalability.
+
+### Q165. What is the difference between synchronous multi-region replication and asynchronous cross-region replication, in terms of the latency/consistency trade-off?
+**Answer:** Synchronous multi-region replication (as used by distributed SQL systems for strong consistency) requires a write to be acknowledged by nodes potentially far away, adding real network latency to every write (bound by the speed of light between regions). Asynchronous replication avoids that write latency by acknowledging locally first and replicating in the background, but risks losing recent writes or serving stale reads if the primary region fails before replicating.
+
+### Q166. How would you diagnose and fix "lock contention" causing widespread slow transactions in production?
+**Answer:** Query the database's lock/blocking views (e.g., `pg_locks`/`pg_stat_activity` in PostgreSQL, or `SHOW ENGINE INNODB STATUS` in MySQL) to identify which transaction is holding a lock and which are waiting, look for long-running or forgotten-open transactions holding locks unnecessarily long, shorten transaction scope (do less work between `BEGIN` and `COMMIT`), and consider a less restrictive isolation level or more granular locking (row-level vs. table-level) if appropriate.
+
+### Q167. What is "lock escalation," and why can it hurt concurrency on a busy table?
+**Answer:** Some database engines automatically convert many fine-grained row-level locks into a single, coarser table-level lock once a threshold is exceeded, to reduce lock-management overhead — but this can suddenly block many unrelated concurrent transactions that only needed a few different rows, causing a concurrency cliff on busy tables.
+
+### Q168. What is the difference between optimistic and pessimistic concurrency control, and when would you choose each?
+**Answer:** **Pessimistic** control locks a row/resource upfront before modifying it, blocking others until released — safer under high contention, but reduces concurrency. **Optimistic** control lets multiple transactions proceed without locking, then checks for a conflict (e.g., via a version number column) only at commit time, retrying if a conflict is detected — better throughput when conflicts are rare, but wastes work when they aren't.
+```sql
+UPDATE products SET stock = stock - 1, version = version + 1
+WHERE id = 5 AND version = 3; -- fails/updates 0 rows if version changed since read
+```
+
+### Q169. How would you design a globally unique, roughly time-sortable ID generation strategy for a distributed SQL system without a single auto-increment sequence bottleneck?
+**Answer:** Common approaches include Twitter's Snowflake-style IDs (timestamp + machine/shard ID + sequence number packed into one integer), or ULIDs/UUIDv7, which embed a timestamp prefix for rough sortability while remaining generateable independently on any node without coordination — avoiding a single centralized sequence generator becoming a bottleneck or single point of failure.
+
+### Q170. What is the "thundering herd" problem in the context of a database cache, and how would you mitigate it?
+**Answer:** It happens when a popular cached value expires, and many concurrent requests all simultaneously miss the cache and hammer the database with the same expensive query at once. Mitigations include: a "lock"/single-flight pattern where only one request recomputes the value while others wait for it, staggered/jittered expiration times, or proactively refreshing hot cache entries before they expire.
+
+### Q171. What is query plan instability, and how might you detect and address it in a production database over time?
+**Answer:** This is when the same query's execution plan unexpectedly changes (often for the worse) as data grows or statistics shift, causing intermittent performance regressions without any code change. Detecting it requires plan/performance monitoring over time (not just a one-time check), and addressing it might mean plan-pinning features, more frequent statistics updates, or restructuring the query/indexes to be less sensitive to data skew.
+
+### Q172. How would you design a database schema and query strategy to support "point-in-time" historical queries (e.g., "what did this record look like on date X")?
+**Answer:** Common approaches: (1) "bi-temporal" tables that never update in place — instead, every change inserts a new row with `valid_from`/`valid_to` timestamps, and queries filter for the row valid at the requested date; or (2) a separate append-only history/audit table alongside the current-state table, reconstructing historical state by replaying changes up to the target date.
+```sql
+SELECT * FROM product_price_history
+WHERE product_id = 5 AND valid_from <= '2026-03-01' AND (valid_to IS NULL OR valid_to > '2026-03-01');
+```
+
+### Q173. What are the trade-offs of soft deletes (`is_deleted` flag) vs. hard deletes, especially at scale?
+**Answer:** Soft deletes preserve data for audit/undo/analytics purposes and avoid breaking foreign key references elsewhere, but every query must remember to filter out deleted rows (easy to forget, and can be enforced with a view or RLS), tables grow indefinitely unless archived, and unique constraints get tricky (you may need a partial unique index that only applies to non-deleted rows). Hard deletes keep tables lean and constraints simple, but data is genuinely gone (a real concern for compliance/audit needs or accidental deletion recovery).
+```sql
+-- Partial unique index allowing re-use of an email after "soft delete"
+CREATE UNIQUE INDEX idx_active_email ON users(email) WHERE is_deleted = false;
+```
+
+### Q174. How would you design a database migration strategy for splitting one large monolithic database into multiple services' databases (as part of a microservices migration), while keeping data consistent during the transition?
+**Answer:** A common phased approach: (1) identify bounded contexts and which tables belong to which service, (2) start dual-writing to both the old monolith table and new service database (or use change-data-capture/CDC to replicate changes), (3) migrate reads to the new service gradually (feature-flagged), (4) once fully cut over and verified, stop writing to the old table and remove it — minimizing risk versus a single risky "big bang" cutover.
+
+### Q175. What is Change Data Capture (CDC), and how is it commonly implemented for SQL databases?
+**Answer:** CDC captures row-level insert/update/delete events as they happen in a database, typically by reading the database's own transaction/write-ahead log (like MySQL's binlog or PostgreSQL's logical replication slots) rather than polling tables — powering use cases like streaming data to a search index, cache invalidation, or feeding a data warehouse, with minimal impact on the source database.
+
+### Q176. How would you design a high-throughput, exactly-once event processing pipeline reading from a SQL database's CDC stream, given that most streaming systems only guarantee at-least-once delivery?
+**Answer:** Make the downstream processing logic idempotent (e.g., using the CDC event's log sequence number or primary key + version as a natural deduplication key, with an upsert), so even if the same event is delivered/processed more than once, the end result is the same — effectively achieving "exactly-once" outcomes on top of "at-least-once" delivery guarantees.
+
+### Q177. What is a "hot row" problem in a high-concurrency SQL system (e.g., a single popular product's inventory count being updated by thousands of concurrent orders), and what strategies mitigate it?
+**Answer:** All those concurrent updates serialize on locking the same single row, creating a bottleneck. Mitigations include: sharding the counter into multiple sub-rows (e.g., N inventory "buckets" summed together) to spread contention, using an append-only ledger of increments/decrements that's periodically summed instead of updating one row directly, or using database-specific lock-free counter mechanisms where available.
+
+### Q178. What is the significance of `SELECT ... FOR UPDATE`, and what risk does it help prevent?
+**Answer:** It explicitly locks the selected rows within a transaction, preventing other transactions from modifying (or in some databases, even reading with their own `FOR UPDATE`) them until the current transaction commits/rolls back — used to safely implement "read then conditionally update" logic (like checking and reserving inventory) without a race condition between the read and the subsequent write.
+```sql
+BEGIN;
+SELECT stock FROM products WHERE id = 5 FOR UPDATE;
+UPDATE products SET stock = stock - 1 WHERE id = 5;
+COMMIT;
+```
+
+### Q179. How would you design a database backup and disaster recovery strategy that meets a strict RPO (Recovery Point Objective) and RTO (Recovery Time Objective)?
+**Answer:** For a low RPO (minimal data loss), combine periodic full backups with continuous WAL/binlog archiving, enabling point-in-time recovery to nearly the moment of failure. For a low RTO (fast recovery), maintain a warm/hot standby replica ready to be promoted immediately, rather than relying solely on restoring from backup files, which takes much longer for large databases.
+
+### Q180. What is "split-brain" in a database high-availability setup, and how do systems typically prevent it?
+**Answer:** Split-brain happens when a network partition causes two nodes to both believe they're the primary and both accept writes independently, leading to conflicting, irreconcilable data. It's typically prevented by requiring a **majority quorum** to elect/confirm a primary (so only one side of a partition can ever have a majority), or using a dedicated fencing/arbitration mechanism to forcibly ensure only one primary is ever active.
+
+### Q181. What is the difference between logical and physical replication, and what are the trade-offs of each?
+**Answer:** Physical replication copies raw data at the disk-block/WAL level — fast and exact, but generally requires the exact same database version/architecture on both ends. Logical replication replicates at the level of actual row-change events (inserts/updates/deletes), which is more flexible (can replicate between different versions, filter specific tables, or feed into a different system entirely) but has somewhat more overhead.
+
+### Q182. How would you design a database schema to efficiently support multi-tenant SaaS row-level isolation at massive scale (millions of tenants), while keeping query performance predictable per tenant?
+**Answer:** Always include `tenant_id` as a leading column in relevant composite indexes (and ideally as part of the physical partitioning strategy, e.g., partition by hashed `tenant_id`) so each tenant's queries stay fast regardless of overall table size, enforce tenant isolation via row-level security as a safety net against application bugs, and consider separate databases/schemas per tenant only for your largest, highest-value tenants where noisy-neighbor risk or compliance needs justify the extra operational overhead.
+
+### Q183. What is "noisy neighbor" risk in a shared multi-tenant database, and how would you mitigate it?
+**Answer:** One tenant running expensive queries or generating huge write volume can degrade performance for all other tenants sharing the same database/instance. Mitigations include resource governance (query timeouts, connection/resource limits per tenant), monitoring and isolating outlier tenants onto dedicated infrastructure, and read replicas dedicated to absorbing heavy analytical tenant workloads separately from the core OLTP path.
+
+### Q184. How would you approach performance-tuning a query that `EXPLAIN ANALYZE` shows spends most of its time in a "Sort" operation before a `LIMIT`?
+**Answer:** Check whether an index already exists (or could be created) matching the `ORDER BY` columns — if so, the database can walk the index in order and avoid sorting in memory/disk entirely, especially valuable when combined with `LIMIT` since it only needs to read as many rows as required rather than sorting the whole result set first.
+
+### Q185. What is "index-only scan," and what conditions must be met for the optimizer to use one (in PostgreSQL specifically)?
+**Answer:** Similar to a covering index scan — the query is answered entirely from the index without visiting the table. In PostgreSQL specifically, this also requires the relevant table pages to be marked "all-visible" in the visibility map (meaning no concurrent transactions could see a different version of those rows), which is one more reason regular `VACUUM` matters — it helps keep the visibility map up to date.
+
+### Q186. How would you design database schema and indexing to support efficient full-text search directly in a relational database, without a separate search engine?
+**Answer:** Use the database's native text search capabilities where available — like PostgreSQL's `tsvector`/`tsquery` with a GIN index — which handles tokenization, stemming, and relevance ranking natively, avoiding the operational cost of running a separate system like Elasticsearch for simpler search needs.
+```sql
+ALTER TABLE articles ADD COLUMN search_vector tsvector
+  GENERATED ALWAYS AS (to_tsvector('english', title || ' ' || body)) STORED;
+CREATE INDEX idx_search ON articles USING GIN(search_vector);
+
+SELECT * FROM articles WHERE search_vector @@ to_tsquery('database & performance');
+```
+
+### Q187. What is a "GIN" index and a "GiST" index in PostgreSQL, and when would you use each?
+**Answer:** **GIN** (Generalized Inverted Index) is optimized for values containing multiple component elements to search within — like full-text search vectors, arrays, or JSONB — where a query might match on any contained element. **GiST** (Generalized Search Tree) is a more general-purpose, extensible index structure used for things like geometric/geospatial data and range types, supporting nearest-neighbor and overlap queries that a plain B-tree can't handle.
+
+### Q188. How would you design and query a schema that stores semi-structured JSON data within a relational database while still being able to index and query into it efficiently?
+**Answer:** Use a native JSON/JSONB column type (PostgreSQL's `JSONB` is binary-optimized and indexable), and create a GIN index on the JSONB column (or an expression index on a specific frequently-queried key) to support efficient containment and key-lookup queries — combining relational structure for core fields with flexibility for variable attributes.
+```sql
+CREATE TABLE products (id SERIAL PRIMARY KEY, name TEXT, attributes JSONB);
+CREATE INDEX idx_attrs ON products USING GIN(attributes);
+SELECT * FROM products WHERE attributes @> '{"color": "red"}';
+```
+
+### Q189. What is the danger of using `OFFSET` for pagination on a very large, frequently-changing table, both in terms of performance and correctness?
+**Answer:** Performance-wise, a large `OFFSET` still requires the database to scan and discard all skipped rows internally, getting progressively slower for deeper pages. Correctness-wise, if rows are inserted/deleted between page loads, `OFFSET`-based pagination can skip or duplicate rows for the user — keyset (cursor-based) pagination using an indexed, stable sort key avoids both problems.
+
+### Q190. How would you design a rate-limiting or quota system backed by a SQL database that needs to handle high concurrent write volume accurately?
+**Answer:** Avoid a single row per user being updated on every request (hot row contention, as in Q177) — instead, use short time-bucketed counter rows (e.g., one row per user per minute) combined with an atomic `INSERT ... ON CONFLICT DO UPDATE SET count = count + 1`, and periodically clean up old buckets; for extremely high volume, consider offloading the hot-path counting to an in-memory store like Redis and only persisting aggregates to SQL.
+
+### Q191. What is "database sharding key selection," and what characteristics make a good shard key?
+**Answer:** A good shard key has high cardinality (many distinct values, avoiding hotspots), distributes both data volume and query/write load evenly across shards, and aligns with your application's most common query patterns so most queries can be satisfied by a single shard rather than requiring expensive cross-shard fan-out/joins.
+
+### Q192. How would you handle a query that legitimately must aggregate data across all shards in a sharded SQL system (a "scatter-gather" query), and what's the performance implication?
+**Answer:** The query router sends the query to every relevant shard in parallel, each computes a partial result, and the router combines/merges those partial results (e.g., summing partial sums, or re-sorting/re-limiting merged rows) into the final answer. This is inherently slower and more resource-intensive than a single-shard query, and is why schema/shard-key design that minimizes the need for scatter-gather queries matters so much.
+
+### Q193. What is "database connection storm" prevention at scale, and what patterns (beyond simple pooling) help at very high scale?
+**Answer:** At very high scale, even connection pools across many application instances can collectively overwhelm a database's max connection limit. Patterns include a centralized connection proxy/pooler (like PgBouncer for PostgreSQL or ProxySQL for MySQL) that multiplexes many client connections onto a smaller number of actual database connections, and circuit breakers in application code to fail fast rather than piling up more connection attempts during an outage.
+
+### Q194. How would you design and validate a database schema change to be genuinely backward-compatible during a rolling deployment (where old and new application code run simultaneously for a period)?
+**Answer:** Ensure the schema change (e.g., adding a nullable column, or a new table) doesn't break queries from the *old* code version still running, avoid dropping/renaming columns the old code still references until it's fully retired, and test the migration against both old and new application code paths running concurrently in a staging environment before production rollout.
+
+### Q195. What are common causes and mitigations for "replication lag spikes" on an asynchronous read replica in a SQL database?
+**Answer:** Common causes: a single large/long-running write on the primary, replica hardware being under-provisioned relative to the primary, or heavy read load on the replica competing for the same resources needed to apply incoming replicated changes. Mitigations: monitoring lag with alerting thresholds, ensuring replica hardware matches or exceeds primary capacity, and routing only lag-tolerant read traffic to replicas while critical reads go to the primary.
+
+### Q196. How would you reason about and mitigate the risk of "cascading failure" where a slow database causes an entire application to fall over?
+**Answer:** Set aggressive statement/connection timeouts so slow queries fail fast rather than piling up and exhausting the connection pool, use circuit breakers in application code to stop sending requests to a database that's clearly struggling (giving it room to recover), and ensure critical paths degrade gracefully (e.g., serving cached/stale data) rather than blocking indefinitely on a database call.
+
+### Q197. What's the difference between "vertical" database high availability (failover to a standby) and true "active-active" multi-master setups, and why is active-active much harder to get right?
+**Answer:** Failover HA has one active primary at a time; a standby only takes over if the primary fails — conflict-free by design, but that standby capacity mostly sits idle. Active-active allows writes to multiple nodes simultaneously, which can improve write availability and reduce write latency for geographically distributed clients, but requires solving conflict resolution when the same data is modified concurrently on different nodes (a genuinely hard distributed-systems problem, often requiring conflict-free data types or last-write-wins policies with data-loss risk).
+
+### Q198. How would you approach diagnosing a mysterious, intermittent production issue where the same query is sometimes fast and sometimes extremely slow?
+**Answer:** Capture and compare `EXPLAIN ANALYZE` output from both a fast and a slow execution (the plan itself may differ, hinting at plan instability/stale stats), check for lock contention/blocking at the time of the slow execution, check for resource contention (CPU/IO/memory pressure from other queries running concurrently), and check whether the slow instances correlate with specific parameter values hitting unusually skewed data.
+
+### Q199. What is "database schema drift," and how would you prevent it across multiple environments (dev/staging/production)?
+**Answer:** Schema drift happens when the actual schema in different environments diverges from what's defined in version-controlled migration scripts — usually from manual, undocumented changes made directly against a database. Preventing it means enforcing that **all** schema changes go through the tracked migration tool/process (no direct manual `ALTER TABLE` in production), and periodically running automated schema-diff checks between environments.
+
+### Q200. If you were asked to design the data layer for a brand-new, large-scale application from scratch today, what's your high-level decision framework for choosing between a single SQL database, SQL with read replicas/sharding, or a NoSQL/polyglot persistence approach?
+**Answer:** Start with a single, well-indexed relational database — it's the simplest to reason about and handles surprisingly large scale with good schema/index design. Add read replicas when read traffic (not write traffic) becomes the bottleneck. Consider sharding or a distributed SQL database only once write throughput or data volume genuinely exceeds what a well-tuned single instance (plus replicas) can handle. Reach for NoSQL/polyglot persistence (like MongoDB alongside SQL) specifically for workloads that don't fit the relational model well — like deeply nested, schema-flexible documents, extremely high-velocity event data, or specialized needs like full-text/vector search — rather than defaulting to it for scale alone, since scale problems are often solvable within SQL first.
+
+---
+
+<a id="part-3-db-concepts"></a>
+# PART 3: Database Concepts & Schema Design — 100 Questions
+
+## 3.1 Basic (Q1–Q25)
+
+### Q1. What is a database, and what is a DBMS?
+**Answer:** A database is an organized collection of structured data. A DBMS (Database Management System) is the software that lets you create, read, update, delete, and manage that data — handling concerns like storage, security, concurrency, and backups so applications don't have to manage raw files themselves.
+
+### Q2. What is the difference between a DBMS and an RDBMS?
+**Answer:** A DBMS is the general category of software for managing data. An RDBMS (Relational DBMS) is a specific type of DBMS that organizes data into tables with rows/columns, enforces relationships via keys, and requires a predefined schema — like MySQL or PostgreSQL. Not all DBMSs are relational (e.g., MongoDB is a DBMS but not an RDBMS).
+
+### Q3. What is a data model?
+**Answer:** A data model defines how data is logically structured and related — the relational model (tables/rows), the document model (nested JSON-like documents), the key-value model, and the graph model (nodes/edges) are common examples, each suited to different kinds of applications.
+
+### Q4. What is an Entity-Relationship (ER) diagram?
+**Answer:** An ER diagram is a visual representation of a database's design — showing entities (things, like "Customer" or "Order"), their attributes (properties, like "name" or "email"), and the relationships between them (like "Customer places Order") — used to plan a schema before actually building it.
+
+### Q5. What is an entity, an attribute, and a relationship?
+**Answer:** An **entity** is a distinct thing or object the database stores information about (e.g., a Customer). An **attribute** is a property of that entity (e.g., name, email). A **relationship** describes how two entities are connected (e.g., a Customer "places" an Order).
+
+### Q6. What is cardinality in database design, and what are the main types?
+**Answer:** Cardinality describes how many instances of one entity can relate to instances of another. **One-to-one (1:1)** — one row relates to exactly one row elsewhere (e.g., a user and their profile). **One-to-many (1:N)** — one row relates to many rows elsewhere (e.g., a customer has many orders). **Many-to-many (M:N)** — many rows on both sides relate to many on the other (e.g., students and courses), usually implemented via a junction table.
+
+### Q7. What is a primary key, a candidate key, and a super key?
+**Answer:** A **candidate key** is any column (or set of columns) that could uniquely identify a row. A **super key** is any set of columns that uniquely identifies a row, even if it includes extra, unnecessary columns. The **primary key** is the specific candidate key chosen to be the table's official unique identifier.
+
+### Q8. What is an alternate key?
+**Answer:** An alternate key is a candidate key that was **not** chosen as the primary key — e.g., if `id` is the primary key but `email` is also unique, `email` is an alternate key (often still enforced with a `UNIQUE` constraint).
+
+### Q9. What is data independence?
+**Answer:** Data independence means changes to the database's underlying storage/structure don't require rewriting the applications that use it. **Logical** data independence: changing the logical schema (like adding a table) doesn't break existing queries. **Physical** data independence: changing physical storage (like adding an index or changing disk layout) doesn't affect the logical schema or application code.
+
+### Q10. What is the three-schema architecture in database design?
+**Answer:** It's a conceptual framework separating a database into three levels: the **internal** (physical) schema — how data is actually stored on disk; the **conceptual** (logical) schema — the overall structure of the whole database (tables, relationships); and the **external** (view) schema — how individual applications/users see a customized subset of the data. This separation is what enables data independence.
+
+### Q11. What does ACID mean, and what does BASE mean, at a high level?
+**Answer:** **ACID** (Atomicity, Consistency, Isolation, Durability) describes strong transactional guarantees typical of relational databases. **BASE** (Basically Available, Soft state, Eventually consistent) describes a looser model common in many distributed NoSQL systems, prioritizing availability and scalability over immediate, strict consistency.
+
+### Q12. What are the main categories of NoSQL databases?
+**Answer:** **Document** databases (MongoDB) store JSON-like documents. **Key-value** stores (Redis, DynamoDB) store simple key→value pairs, optimized for extremely fast lookups. **Column-family** stores (Cassandra) organize data in column groups optimized for write-heavy, wide-row use cases. **Graph** databases (Neo4j) store nodes and edges, optimized for traversing relationships.
+
+### Q13. At a high level, how do you decide between SQL and NoSQL for a new project?
+**Answer:** Choose SQL when your data is naturally structured/tabular, relationships between entities matter a lot, and you need strong transactional consistency (like financial data). Choose NoSQL when your data is more flexible/hierarchical (like content-heavy documents), you expect to scale writes horizontally beyond what a single relational server easily handles, or your access patterns are simple key-based lookups at very high throughput. Many real systems use both (polyglot persistence).
+
+### Q14. What are the typical steps in a database design process?
+**Answer:** (1) Gather requirements — what data needs to be stored and how it'll be used. (2) Conceptual design — build an ER diagram identifying entities/relationships. (3) Logical design — translate the ER diagram into a normalized relational schema (tables, keys). (4) Physical design — decide indexes, partitioning, data types, storage details. (5) Implementation and iteration as requirements evolve.
+
+### Q15. What is a schema, and what's the difference between a logical schema and a physical schema?
+**Answer:** A schema is the structural blueprint of a database — its tables, columns, types, and relationships. The **logical schema** describes this structure conceptually (independent of how it's actually stored). The **physical schema** describes the actual storage details — file organization, indexes, partitioning — that implement that logical structure.
+
+### Q16. What is data integrity, and what are its main types?
+**Answer:** Data integrity means the data in a database remains accurate and consistent. **Entity integrity** ensures every table has a unique, non-null primary key. **Referential integrity** ensures foreign key relationships always point to a valid, existing row (or are appropriately null). **Domain integrity** ensures column values conform to the correct type/range/format (enforced via data types and `CHECK` constraints).
+
+### Q17. What is a weak entity, in ER modeling terms?
+**Answer:** A weak entity doesn't have a sufficient set of attributes to form its own primary key on its own — it depends on a related "strong" entity's key as part of its own identity. For example, an "OrderItem" might not make sense without its "Order" and is often identified by `(order_id, line_number)` together.
+
+### Q18. What is an associative (junction) entity?
+**Answer:** An associative entity represents a many-to-many relationship between two entities, turning it into two one-to-many relationships — like an `Enrollments` table connecting `Students` and `Courses`, which may also carry its own attributes (like `enrollment_date` or `grade`).
+
+### Q19. What is the difference between a schema and an instance of a database?
+**Answer:** The schema is the structural design (tables, columns, constraints) — it changes rarely. An instance is the actual data stored in the database at a given moment in time — it changes constantly as rows are inserted/updated/deleted. Think of the schema as the blueprint and the instance as the current contents of the building.
+
+### Q20. What is metadata in a database context?
+**Answer:** Metadata is "data about data" — information describing the database's structure itself, like table names, column names/types, constraints, and index definitions. It's stored in the database's system catalog (sometimes called the "data dictionary") and is what tools like `information_schema` in SQL expose.
+
+### Q21. What is the difference between a table, a row, and a column?
+**Answer:** A table is a structured collection of related data (like `users`). A row (or "record" / "tuple") is one individual entry in that table. A column (or "field" / "attribute") is one specific piece of information tracked for every row (like `email`).
+
+### Q22. What does "database normalization" mean, in one sentence, and why do it?
+**Answer:** Normalization is the process of organizing tables and columns to minimize data redundancy and avoid update/insert/delete anomalies, by ensuring each piece of information is stored in exactly one logical place.
+
+### Q23. What is a foreign key constraint used for, conceptually (beyond the SQL syntax)?
+**Answer:** It represents and enforces a relationship between two entities at the database level — guaranteeing that a reference (like an order's `customer_id`) always points to a customer that actually exists, which is fundamental to maintaining a trustworthy, consistent dataset.
+
+### Q24. What's the difference between a "one-to-one" relationship and just putting all the attributes in a single table?
+**Answer:** Even though a 1:1 relationship could sometimes be merged into one table, it's often kept separate when: the two groups of attributes are conceptually distinct (e.g., "User" vs. "UserPreferences"), one side is optional/sparse (most rows wouldn't have it), or one side needs different access permissions/security than the other.
+
+### Q25. What is the difference between a database and a data warehouse, at a conceptual level?
+**Answer:** A (typical operational) database is optimized for OLTP — many small, fast, current-state read/write transactions supporting an application. A data warehouse is optimized for OLAP — large-scale analytical queries over historical data aggregated from potentially multiple source systems, usually updated in batches rather than in real time.
+
+## 3.2 Intermediate (Q26–Q50)
+
+### Q26. How do you map an ER diagram's relationships to actual relational tables?
+**Answer:** For a **1:1** relationship, you can either merge both entities into one table, or keep them separate with a foreign key (often also unique) on one side. For a **1:N** relationship, the foreign key goes on the "many" side, referencing the "one" side's primary key. For an **M:N** relationship, you create a separate junction table holding foreign keys to both entities.
+```sql
+-- 1:N example: one customer has many orders
+CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT REFERENCES customers(id));
+```
+
+### Q27. What is a functional dependency, and why does it matter for normalization?
+**Answer:** A functional dependency `A → B` means that knowing the value of column A always tells you the value of column B (B "depends on" A). Normalization rules (2NF, 3NF, BCNF) are formally defined in terms of eliminating "bad" functional dependencies — like a non-key column depending on only part of a composite key, or on another non-key column — that cause redundancy and anomalies.
+
+### Q28. Walk through a concrete example of un-normalized data being brought to 3NF.
+**Answer:** Start with one flat table: `Orders(order_id, customer_name, customer_email, product_name, product_price, quantity)`. This repeats customer and product info on every order row. Normalizing: split into `Customers(customer_id, name, email)`, `Products(product_id, name, price)`, and `Orders(order_id, customer_id, product_id, quantity)` — each fact now lives in exactly one place, and updating a customer's email only requires changing one row.
+
+### Q29. What are "insertion," "update," and "deletion" anomalies, and how does normalization prevent them?
+**Answer:** In a poorly normalized (redundant) table: an **insertion anomaly** might force you to know unrelated data just to add a row (e.g., can't add a new product without an order). An **update anomaly** means changing one fact (like a customer's email) requires updating it in multiple rows, risking inconsistency if you miss one. A **deletion anomaly** means deleting one row accidentally loses unrelated information (e.g., deleting the only order for a product loses all info about that product). Proper normalization, by separating concerns into distinct tables, avoids all three.
+
+### Q30. In schema design, how do you decide between a natural key and a surrogate (auto-generated) key for a table's primary key?
+**Answer:** Favor a surrogate key (like an auto-increment integer or UUID) by default — it never changes, has no business meaning that might turn out to be wrong (like assuming an email is permanent/unique), and keeps foreign keys stable across the schema. Use a natural key when it's genuinely immutable and meaningful (like an ISO country code), and you specifically want to prevent duplicate real-world entities without an extra lookup.
+
+### Q31. Design a basic e-commerce schema: what tables would you include and how would they relate?
+**Answer:** Core tables: `customers` (id, name, email), `products` (id, name, price, stock), `orders` (id, customer_id → customers, status, created_at), and `order_items` (order_id → orders, product_id → products, quantity, price_at_purchase) as the junction table between orders and products — capturing the many-to-many relationship, plus quantity and a price snapshot (since product prices can change after an order is placed).
+```sql
+CREATE TABLE order_items (
+  order_id INT REFERENCES orders(id),
+  product_id INT REFERENCES products(id),
+  quantity INT NOT NULL,
+  price_at_purchase DECIMAL(10,2) NOT NULL,
+  PRIMARY KEY (order_id, product_id)
+);
+```
+
+### Q32. Why do you store `price_at_purchase` on `order_items` instead of just joining to the current `products.price`?
+**Answer:** Product prices change over time, but an order should reflect the price the customer actually paid at the time of purchase — joining to the live `products` table would incorrectly show today's price for old orders. This is a deliberate, small denormalization for historical accuracy.
+
+### Q33. Design a basic social media schema: what tables would you need for users, posts, and "follows"?
+**Answer:** `users` (id, username, email), `posts` (id, user_id → users, content, created_at), and a `follows` junction table (follower_id → users, followee_id → users) representing the many-to-many "who follows whom" relationship — with a composite primary key/unique constraint on `(follower_id, followee_id)` to prevent duplicate follows.
+```sql
+CREATE TABLE follows (
+  follower_id INT REFERENCES users(id),
+  followee_id INT REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (follower_id, followee_id)
+);
+```
+
+### Q34. What is a "polymorphic association," and why is it tricky to model in a strict relational schema?
+**Answer:** A polymorphic association is when one table (like `comments`) needs to reference **different types** of parent entities (like both `posts` and `photos`) through a single relationship. It's tricky because a standard foreign key can only reference one specific table — common workarounds include a `commentable_type` + `commentable_id` pair (application-enforced, no true FK constraint), or separate join tables per type (`post_comments`, `photo_comments`), each with proper FK constraints.
+
+### Q35. What is the "soft delete" schema pattern, and what are its main design considerations?
+**Answer:** Instead of physically deleting a row, you set a flag (like `deleted_at` timestamp or `is_deleted` boolean) to mark it as logically gone while keeping the data. Design considerations: every normal query must remember to filter out soft-deleted rows (best enforced via a view or RLS), and unique constraints often need to be scoped to only non-deleted rows (a partial/filtered unique index) so a "deleted" value can be reused.
+
+### Q36. What is the "audit trail" schema pattern?
+**Answer:** A separate table (or set of columns) that records the history of changes to important data — who changed what, when, and what the old/new values were — typically populated via triggers or application-level logic, used for compliance, debugging, and accountability.
+```sql
+CREATE TABLE audit_log (
+  id SERIAL PRIMARY KEY,
+  table_name TEXT, record_id INT, action TEXT,
+  changed_by INT, changed_at TIMESTAMP DEFAULT NOW(),
+  old_values JSONB, new_values JSONB
+);
+```
+
+### Q37. What is a "versioning" schema pattern, and when would you use it over a simple audit log?
+**Answer:** Instead of (or in addition to) logging changes separately, each version of an entity is stored as its own full row (e.g., `document_versions(document_id, version_number, content, created_at)`), letting you directly query/retrieve any specific past version as a first-class row — useful when past versions themselves need to be actively queried or restored, not just referenced for audit purposes.
+
+### Q38. What are the four common patterns for modeling hierarchical data (like categories or org charts) in a relational database?
+**Answer:** **Adjacency list**: each row stores its direct `parent_id` — simple, but requires recursive queries to get a full subtree. **Path enumeration**: each row stores its full ancestor path as a string (e.g., `"1/4/9"`) — fast subtree lookups via `LIKE`, but path updates are needed if a node moves. **Nested set**: each row stores `left`/`right` numbers representing its position in a tree traversal — very fast subtree reads, but expensive updates. **Closure table**: a separate table storing every ancestor-descendant pair (not just direct parent-child) — flexible and fast for many query types, at the cost of extra storage.
+```sql
+-- Adjacency list
+CREATE TABLE categories (id INT PRIMARY KEY, name TEXT, parent_id INT REFERENCES categories(id));
+```
+
+### Q39. How would you design a schema to support multi-tenancy using a shared-database, shared-schema approach?
+**Answer:** Add a `tenant_id` column to every tenant-scoped table, include it in relevant composite indexes and foreign keys, and enforce that every query filters by the current tenant — ideally backed by database-level row-level security as a safety net, so an application bug can't accidentally leak one tenant's data to another.
+
+### Q40. What is vertical scaling vs. horizontal scaling, applied to database design decisions?
+**Answer:** Vertical scaling means making a single database server more powerful (more CPU/RAM/disk) — simple, but has a ceiling and no redundancy. Horizontal scaling means spreading data/load across multiple servers (via read replicas, partitioning, or sharding) — more complex to design for, but scales much further and adds fault tolerance; good schema design considers which approach (or combination) fits the expected growth.
+
+### Q41. Explain the CAP theorem in your own words, and how it applies to real-world schema/architecture decisions.
+**Answer:** In a distributed system, when a network partition happens (nodes can't all communicate), you must choose between **Consistency** (every node sees the same, most up-to-date data) and **Availability** (every request gets a response, even if it might be stale). You can't have perfect versions of both during a partition. This theorem informs decisions like whether to use a strongly-consistent system (like a traditional RDBMS or CP-configured MongoDB) versus a highly-available, eventually-consistent one (like DynamoDB or Cassandra) based on what your application actually needs.
+
+### Q42. What does the BASE model mean in more detail, and what's a real-world example of an application where it's an acceptable trade-off?
+**Answer:** BASE (Basically Available, Soft state, Eventually consistent) accepts that data might be briefly inconsistent across replicas in exchange for high availability and scalability. A "like count" on a social media post is a good example — it's fine if it's off by a few for a moment while it propagates, but the app must always stay responsive; this would be a poor trade-off for something like a bank account balance.
+
+### Q43. What is database replication, from a schema/architecture design perspective, and why might a schema designer care about it?
+**Answer:** Replication keeps synchronized copies of data across multiple servers for availability and read scalability. It matters for schema design because things like auto-increment ID generation, exact transaction ordering across replicas, and "read your own write" guarantees behave differently once replication (especially asynchronous) is introduced — decisions like choosing UUIDs over sequential IDs are sometimes driven by anticipating a replicated/distributed setup.
+
+### Q44. What is database sharding, from a schema design perspective, and what does it require you to think about upfront?
+**Answer:** Sharding splits a large dataset across multiple independent database instances by a shard key. Designing for it upfront means picking a shard key that keeps related data (that's frequently queried/joined together) on the same shard, avoiding schema patterns that require expensive cross-shard joins or globally unique auto-increment sequences.
+
+### Q45. What is ETL, and how does it relate to schema design for a data warehouse?
+**Answer:** ETL (Extract, Transform, Load) is the process of pulling data from operational (OLTP) source systems, transforming/cleaning/restructuring it, and loading it into a data warehouse — typically remodeled into a schema (like a star schema) optimized for analytical queries, which usually looks quite different from the normalized schema of the source systems.
+
+### Q46. What are the trade-offs of normalization vs. denormalization when designing a schema, summarized?
+**Answer:** Normalization minimizes redundancy and keeps data consistent with less update complexity, but often requires more joins for reads. Denormalization reduces the number of joins needed (faster, simpler reads), at the cost of data duplication and more complex/error-prone update logic to keep duplicated data in sync. The right balance depends on your read/write ratio and consistency requirements.
+
+### Q47. When designing a document database (like MongoDB) schema, how do you decide what to embed vs. what to model as a separate, referenced document?
+**Answer:** Embed data that's always accessed together with its parent, has a bounded/small size, and doesn't need to be queried independently. Reference (link via `_id`) data that's large or unbounded, is shared across multiple parents, needs independent querying/pagination, or changes at a very different rate than the parent.
+
+### Q48. What is database schema version control, and why does it matter for a team?
+**Answer:** It means keeping every schema change (via migration scripts) in source control alongside application code, so the schema's history is tracked, reviewable, and reproducible across environments (dev/staging/production) — preventing the "it works on my machine" problem caused by manually-applied, undocumented database changes.
+
+### Q49. What is "Crow's Foot" notation in ER diagrams?
+**Answer:** Crow's Foot notation is a common visual style for showing cardinality/relationships in ER diagrams — using symbols at the end of relationship lines (like a single line for "one," a circle for "zero/optional," and a fork/"crow's foot" shape for "many") to compactly show things like "one customer has zero-or-many orders."
+
+### Q50. What questions should you always ask before finalizing a schema design (requirements gathering for schema design)?
+**Answer:** What are the core entities and how are they related? What are the most frequent read and write query patterns (this drives indexing and embedding/normalization decisions)? What's the expected data volume and growth rate? What consistency guarantees are actually required (strict vs. eventual)? Are there compliance/audit/retention requirements? Will this need to scale horizontally, and if so, what's a natural partition/shard key?
+
+## 3.3 Advanced (Q51–Q75)
+
+### Q51. Design a schema for a real-time chat application (like WhatsApp). What are the key tables and design decisions?
+**Answer:** Core tables: `users`, `conversations` (id, type: 'direct'/'group'), `conversation_participants` (conversation_id, user_id, joined_at) as a junction table, and `messages` (id, conversation_id, sender_id, content, sent_at). Key decisions: messages should be indexed on `(conversation_id, sent_at)` for fast "load recent messages" queries; for very high scale, messages are often partitioned/sharded by `conversation_id` so a conversation's full history stays together; read receipts are usually modeled as a separate table (`message_id`, `user_id`, `read_at`) rather than bloating the message row itself.
+```sql
+CREATE INDEX idx_messages_conv_time ON messages(conversation_id, sent_at DESC);
+```
+
+### Q52. Design a schema for a ride-sharing app (like Uber). What are the key entities and how would you handle the "driver location" problem?
+**Answer:** Core tables: `riders`, `drivers`, `rides` (id, rider_id, driver_id, status, requested_at, started_at, completed_at, pickup/dropoff coordinates, fare). Driver **live** location is typically **not** stored in the primary relational database at all — it changes too fast and doesn't need durability — it's usually kept in a fast in-memory/geospatial store (like Redis with geospatial commands) for real-time driver-matching, with only periodic snapshots or ride-start/end locations persisted to the relational database for history/billing.
+
+### Q53. Design a schema for a booking/reservation system (like a hotel or event booking) that must prevent double-booking under concurrent requests.
+**Answer:** Core tables: `rooms`/`resources`, `bookings` (id, resource_id, user_id, start_time, end_time, status). To prevent double-booking under concurrency, you can't just check-then-insert in application code (race condition) — instead use a database-level exclusion constraint (PostgreSQL's `EXCLUDE` with a range type prevents overlapping time ranges for the same resource at the database level), or wrap the check-and-insert in a transaction using `SELECT ... FOR UPDATE` on the resource row to serialize concurrent booking attempts.
+```sql
+-- PostgreSQL: prevent overlapping bookings for the same room
+ALTER TABLE bookings ADD CONSTRAINT no_overlap
+EXCLUDE USING gist (room_id WITH =, tstzrange(start_time, end_time) WITH &&);
+```
+
+### Q54. Design a schema for basic inventory management that needs to handle concurrent stock decrements safely.
+**Answer:** Core tables: `products` (id, name, stock_quantity) and `inventory_transactions` (id, product_id, change_amount, reason, created_at) as an append-only ledger. Rather than trusting a mutable `stock_quantity` alone (which can drift/race under high concurrency), many systems derive current stock as `SUM(change_amount)` from the ledger, or use atomic `UPDATE products SET stock = stock - 1 WHERE stock >= 1` (checking the condition and update together atomically) combined with an application-level check on affected row count to detect "out of stock" failures safely.
+
+### Q55. Design a schema for a payment processing system, focusing on how you'd guarantee correctness (no double-charging, accurate balances).
+**Answer:** Use an append-only `ledger_entries` table (id, account_id, amount, transaction_id, type: 'debit'/'credit', created_at) rather than mutable balance columns — an account's current balance is the sum of its ledger entries, which is auditable and naturally supports double-entry bookkeeping (every transaction has matching debit and credit entries that must sum to zero). A `transactions` table with a unique, client-generated `idempotency_key` prevents duplicate processing if a payment request is retried after a network failure.
+```sql
+CREATE TABLE transactions (
+  id SERIAL PRIMARY KEY,
+  idempotency_key VARCHAR(64) UNIQUE NOT NULL,
+  amount DECIMAL(12,2), status TEXT, created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Q56. What does "event-driven schema design" mean, and how does it differ from a traditional CRUD-oriented schema?
+**Answer:** Instead of a schema that only stores current state (overwriting old values on update), an event-driven design stores an append-only sequence of **events** representing every state change (e.g., `OrderPlaced`, `OrderShipped`, `OrderCancelled`), and current state is derived by replaying/folding those events. This preserves full history natively and decouples "what happened" from "how we currently interpret it," at the cost of more complex read logic (or requiring CQRS-style read models).
+
+### Q57. How would you combine CQRS with a physically separate read schema and write schema, and why might you do that?
+**Answer:** The write side uses a schema optimized for correctness and low write-latency (often normalized, or an event store). A separate read schema — potentially in a different database entirely — is built and kept updated asynchronously (via events or CDC) with a shape optimized purely for how the UI actually queries data (heavily denormalized, pre-joined). This lets you scale/tune reads and writes completely independently, at the cost of eventual (not immediate) consistency between a write and its reflection in the read model.
+
+### Q58. How would you design a schema for time-series data (like IoT sensor readings or application metrics) in a relational database?
+**Answer:** A straightforward table (`sensor_id`, `timestamp`, `value`) works at small scale, but at high volume it benefits from time-based partitioning (e.g., one partition per day/week) so old partitions can be archived/dropped cheaply and queries naturally prune to relevant partitions. Many teams instead use a purpose-built time-series database (like TimescaleDB, an extension on PostgreSQL) that automates this partitioning and adds time-series-specific query optimizations and compression.
+
+### Q59. How would you design a schema for a notification system (in-app, email, push) that needs to track delivery status per channel?
+**Answer:** A `notifications` table (id, user_id, type, content, created_at) representing the logical notification, and a separate `notification_deliveries` table (notification_id, channel: 'email'/'push'/'in_app', status: 'pending'/'sent'/'failed'/'read', sent_at) — separating the "what" from the "per-channel delivery status," since one logical notification might be delivered (and fail/succeed) differently across multiple channels.
+
+### Q60. How would you design a schema for a URL shortener (like bit.ly)?
+**Answer:** A single core table: `urls` (id, short_code UNIQUE, long_url, created_by, created_at, expires_at). The `short_code` is typically generated from the row's auto-increment ID encoded in base62 (for compactness) or a random string checked for uniqueness. For analytics, a separate `url_clicks` (url_id, clicked_at, referrer, ip_hash) append-only table tracks usage without bloating the core lookup table.
+
+### Q61. How would you design a schema (or data store) for a rate limiter?
+**Answer:** Rate limiting is a high-frequency, low-latency, short-lived counting problem — it's typically **not** modeled in the primary relational schema at all, but in a fast in-memory store like Redis using counters with TTLs (e.g., `INCR` on a key like `ratelimit:user123:2026-08-11T10:15` with a 1-minute expiry) implementing a fixed-window or sliding-window algorithm, since a relational database would add unacceptable latency and write contention for this use case.
+
+### Q62. How would you design a schema for a leaderboard (like a gaming app) that needs fast "top N" and "user's rank" queries at scale?
+**Answer:** A simple `scores` table (`user_id`, `score`, updated via `UPDATE ... SET score = score + x`) works at moderate scale with an index on `score DESC`. At very high scale/frequency, leaderboards are commonly kept in a specialized sorted-set structure (like Redis's `ZSET`), which supports O(log N) "top N" and "rank of user" operations natively — with the relational database only used as the durable source of truth, periodically synced.
+
+### Q63. How would you design a schema for a role-based access control (RBAC) permission system?
+**Answer:** Core tables: `users`, `roles` (id, name), `permissions` (id, name/action), a `role_permissions` junction table (role_id, permission_id), and a `user_roles` junction table (user_id, role_id) — a user's effective permissions are the union of permissions across all their assigned roles, checked via a join at authorization time (often cached, since this check happens on nearly every request).
+```sql
+SELECT DISTINCT p.name FROM permissions p
+JOIN role_permissions rp ON p.id = rp.permission_id
+JOIN user_roles ur ON rp.role_id = ur.role_id
+WHERE ur.user_id = 5;
+```
+
+### Q64. How would you design a schema to handle multi-currency amounts correctly (e.g., an international e-commerce platform)?
+**Answer:** Store every monetary amount alongside an explicit currency code column (e.g., `amount DECIMAL(12,2)`, `currency CHAR(3)`) rather than assuming a single implicit currency — never store amounts as floats, and avoid storing pre-converted values without also recording the exchange rate and timestamp used, since conversions need to be auditable and exchange rates change over time.
+```sql
+CREATE TABLE payments (
+  id SERIAL PRIMARY KEY,
+  amount DECIMAL(12,2) NOT NULL,
+  currency CHAR(3) NOT NULL,
+  exchange_rate_to_usd DECIMAL(12,6),
+  converted_at TIMESTAMP
+);
+```
+
+### Q65. How would you design a soft-delete schema that still allows a "unique" constraint (like email) to be reused after a user is deleted?
+**Answer:** A plain `UNIQUE` constraint on `email` would block re-registration with the same email even after the original account is soft-deleted. Solve this with a partial/filtered unique index that only applies to non-deleted rows, so a deleted row's email no longer counts toward uniqueness.
+```sql
+CREATE UNIQUE INDEX idx_email_active ON users(email) WHERE deleted_at IS NULL;
+```
+
+### Q66. How would you design an audit logging schema that can handle very high write volume without becoming a bottleneck on the primary tables?
+**Answer:** Avoid synchronous triggers writing to a heavily-indexed audit table on every single transaction if volume is extreme — instead, emit change events asynchronously (e.g., via CDC reading the database's own transaction log, or an application-level event queue) to a separate audit store optimized for high-volume appends (which might even be a different technology, like a columnar or log-based store), decoupling audit-write latency from the main transaction path.
+
+### Q67. How might a schema for a recommendation system be structured, combining relational and other data sources?
+**Answer:** Core relational tables track explicit entities and interactions: `users`, `items`, and an `interactions` table (user_id, item_id, interaction_type: 'view'/'purchase'/'like', timestamp). However, the actual recommendation computation (collaborative filtering, embeddings) usually happens in a separate ML pipeline/feature store, with only the resulting scores or the raw interaction data feeding back into (or reading from) the relational schema — the schema's job is mainly to reliably capture the interaction events.
+
+### Q68. What criteria would you use to evaluate whether a proposed schema design is "good"?
+**Answer:** Does it accurately model the real-world relationships and constraints (referential/domain integrity)? Is it normalized appropriately for its consistency needs, with denormalization only where deliberately justified? Does it efficiently support the application's actual, most frequent query patterns (verified against real query plans, not just theory)? Is it extensible to reasonably foreseeable future requirements without a total rewrite? Does it have appropriate indexes, constraints, and (if needed) a sharding/partitioning strategy for expected scale?
+
+### Q69. How would you decide between using SQL and NoSQL for a specific new feature within an application that already primarily uses SQL?
+**Answer:** Evaluate the feature's actual data shape and access pattern in isolation — if it's naturally document-like (flexible, nested, no need for cross-entity joins/transactions) or needs extreme write throughput at a scale the existing SQL database can't comfortably handle, a purpose-built NoSQL store for just that feature (polyglot persistence) can make sense, rather than forcing every feature into one single database technology.
+
+### Q70. What is "polyglot persistence," and what's a realistic example of using multiple database types together in one application?
+**Answer:** Polyglot persistence means deliberately using different types of databases for different parts of an application, each chosen for what it's best at. Example: a relational database (PostgreSQL) for core transactional data like orders/payments, Redis for session storage/caching/rate-limiting, Elasticsearch for full-text product search, and a time-series database for application metrics/logs — all within one system.
+
+### Q71. What should be included in good schema documentation for a team?
+**Answer:** An up-to-date ER diagram, a description of each table's purpose and key business rules it enforces, explanations for any deliberate denormalization (why it's there, what keeps it in sync), documented conventions (naming, soft-delete pattern, audit pattern used across the schema), and a changelog/migration history so anyone can understand how and why the schema evolved.
+
+### Q72. What would you check in a schema design review before approving a new table/migration?
+**Answer:** Are appropriate primary/foreign keys and constraints defined? Are there indexes supporting the query patterns this feature will actually need (not too few, not excessively many)? Are data types appropriate (no `VARCHAR(255)` for everything, no floats for money)? Does it follow existing schema conventions (naming, soft-delete, audit patterns)? Is the migration safe to run on a live production table at current data volume (won't cause a long lock)? Is there a rollback plan?
+
+### Q73. How would you plan for schema evolution over a product's multi-year lifetime, to avoid painting yourself into a corner?
+**Answer:** Favor additive, backward-compatible changes (new nullable columns/tables) over destructive ones where possible, keep migrations small and incremental rather than big-bang rewrites, avoid deeply hard-coding assumptions that are likely to change (like assuming a user has exactly one email or one address), and periodically revisit and refactor genuinely outgrown parts of the schema deliberately, rather than only ever adding on top of decisions made early on.
+
+### Q74. What database design considerations specifically support high availability?
+**Answer:** Replication (so a single server failure doesn't mean data loss/downtime), avoiding single points of failure in the data layer (like a lone database instance with no standby), designing schema/queries that don't require prohibitively long-held locks (which could delay failover-safe operations), and choosing consistency/replication settings (like majority write concern) that balance durability guarantees against the availability trade-offs of the CAP theorem.
+
+### Q75. What database design considerations specifically support disaster recovery?
+**Answer:** Regular, tested backups (not just backups that are taken but never verified restorable), point-in-time recovery capability (via WAL/binlog archiving) to minimize data loss window (RPO), documented and rehearsed recovery procedures to minimize recovery time (RTO), and geographically separate backup storage/replicas so a regional outage doesn't take out both the primary data and its backups simultaneously.
+
+## 3.4 Super-Advanced (Q76–Q100)
+
+### Q76. How would you approach schema/data design for a globally distributed system serving users across continents with low latency?
+**Answer:** Partition data geographically where possible (e.g., a user's data lives primarily in their home region's database), use a distributed SQL database or geo-sharding to keep reads/writes local to the region for most operations, and reserve genuinely global, low-latency-tolerant coordination (like a global uniqueness check) for the rare cases where it's truly required — since cross-region synchronous coordination on every operation would kill latency.
+
+### Q77. Walk through the real trade-off the CAP theorem forces in a concrete schema/system design scenario: an inventory count system during a network partition.
+**Answer:** If you prioritize **Consistency**, the system refuses to process a sale during a partition rather than risk selling the same last item twice from two disconnected nodes — safe, but the sale fails (unavailable). If you prioritize **Availability**, both disconnected nodes keep accepting sales independently, risking overselling that same last item — available, but requires a reconciliation/compensation process afterward (like canceling one order and apologizing). Real systems often choose availability for the sale itself but track pending reconciliation for edge cases like this.
+
+### Q78. How would you design a schema for a financial ledger system that must guarantee strict consistency, even in a distributed deployment?
+**Answer:** Use double-entry accounting principles at the schema level (every transaction is a balanced set of debit/credit entries that must sum to zero, enforced by application logic and ideally a `CHECK`-like invariant), rely on serializable isolation or explicit row locking for any operation that reads-then-writes a balance, and if distributed, use a database offering strongly consistent distributed transactions (like a distributed SQL system with Raft-based consensus) rather than an eventually-consistent store, since correctness here matters far more than raw throughput.
+
+### Q79. How would event sourcing and CQRS combine architecturally, and what does the schema for each side look like?
+**Answer:** The **write side** schema is a single, append-only `events` table (aggregate_id, event_type, payload, version, created_at) — the authoritative source of truth, never updated or deleted. The **read side** consists of one or more denormalized "projection" tables, each shaped exactly for a specific query/screen, rebuilt/updated by replaying events (often asynchronously via a message queue) — you can even have multiple, differently-shaped read models built from the same event stream for different use cases.
+```sql
+CREATE TABLE events (
+  id BIGSERIAL PRIMARY KEY,
+  aggregate_id UUID NOT NULL,
+  event_type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  version INT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (aggregate_id, version)
+);
+```
+
+### Q80. How would you design the underlying data structures for a search engine's inverted index, conceptually, and why doesn't a standard relational schema work well for this?
+**Answer:** An inverted index maps each unique term to the list of documents (and positions) containing it — the opposite direction of a normal "document contains terms" table, optimized for the query "find all documents containing this term" rather than "find all terms in this document." A plain relational join-based approach (`terms` ↔ `documents` junction table) can technically work at small scale, but doesn't scale well for ranking/relevance scoring and complex text queries — which is why purpose-built search engines (Elasticsearch, Lucene) use specialized on-disk data structures rather than relying on generic relational indexes.
+
+### Q81. When would you choose a graph database over a relational schema for modeling a social network, and what's the actual technical reason relational joins become a problem?
+**Answer:** For queries like "friends of friends of friends" (multi-hop traversal) or "shortest path between two users," a relational schema requires a self-join per hop, and the number of joins (and the intermediate result set size) grows rapidly with each additional hop — becoming very expensive at scale. A graph database stores direct pointers between connected nodes and can walk relationships in roughly constant time per hop, regardless of overall graph size, making deep traversal queries dramatically more efficient.
+
+### Q82. How would you design a schema/architecture for a multi-region, active-active system where writes can happen in any region?
+**Answer:** This requires either (a) partitioning data by region/tenant so each piece of data has one canonical "home" region it's always written to (avoiding true multi-master conflicts), with reads-from-anywhere via replication, or (b) genuinely accepting concurrent multi-region writes to the same data and building explicit conflict resolution (e.g., CRDTs for certain data types, or last-write-wins with a vector clock/timestamp), which is significantly more complex and is only worth it for specific fields/use cases that truly need it.
+
+### Q83. What schema/application design patterns help a system embrace eventual consistency gracefully, rather than fighting it?
+**Answer:** Design idempotent operations so retries/duplicate delivery are safe, make the UI clearly show "pending"/"processing" states rather than implying instant global consistency, use compensating actions for rare conflicts (like the oversold-item reconciliation example) instead of trying to prevent every possible race condition upfront, and pick which specific operations truly need strong consistency (usually a small subset) versus which can tolerate eventual consistency (usually the majority).
+
+### Q84. What does data modeling for a machine learning "feature store" look like, and how does it differ from a typical OLTP schema?
+**Answer:** A feature store typically has two distinct paths: an **offline** store (often columnar/data-warehouse-style) holding large historical feature values for model training, and an **online** store (a fast key-value store) holding just the latest feature values per entity for real-time inference serving — the schema design challenge is ensuring both paths compute features consistently (avoiding "training-serving skew") despite very different underlying storage optimized for very different access patterns.
+
+### Q85. What schema design considerations specifically support GDPR "right to erasure" and data minimization requirements?
+**Answer:** Design so that personally identifiable information (PII) is concentrated in as few, well-known tables/columns as possible (rather than scattered/duplicated everywhere) to make deletion/anonymization tractable, consider crypto-shredding (destroying a per-user encryption key) for genuinely hard-to-locate historical data like backups, and design retention policies (automatic deletion/anonymization after a defined period) into the schema and its maintenance jobs from the start rather than bolting them on later.
+
+### Q86. How would you design a schema/system to be horizontally scalable "from day one," even if you don't need that scale yet?
+**Answer:** Choose primary keys that would work well as future shard keys (avoiding pure sequential auto-increment if you might later shard by, say, `tenant_id` or a UUID), avoid schema patterns that inherently require cross-entity joins/transactions spanning what would become different shards, and keep the option open without necessarily paying the operational complexity cost of actually sharding until real growth demands it — over-engineering for scale you may never reach is its own risk.
+
+### Q87. What are common schema anti-patterns that only become painful "at scale," even though they look fine in a small dev database?
+**Answer:** Unindexed foreign keys (fine with 1,000 rows, catastrophic with 100 million), `VARCHAR`/`TEXT` primary keys instead of integers/UUIDs (bloats every foreign key and index referencing them), storing everything in one giant table with dozens of nullable columns for different "types" of entities, and using auto-increment IDs as a shard key (creating a hotspot the moment you actually need to shard).
+
+### Q88. How would you approach capacity planning specifically at the schema design stage, before any code is written?
+**Answer:** Estimate realistic row counts and growth rate per table over 1-3 years, identify which tables will be "hot" (high read/write frequency) versus mostly archival, and design accordingly upfront — e.g., planning time-based partitioning for a table you know will grow into the billions of rows, rather than discovering the need for it during a painful production migration later.
+
+### Q89. How would you choose a shard/partition key for a real system like a Twitter-style feed, and what specific hot-spot risk would you need to design around?
+**Answer:** Sharding tweets by `user_id` keeps a user's own tweets together (good for "show this user's profile timeline"), but creates a severe hot-spot problem for celebrity accounts with millions of followers — every tweet from that one account gets hammered with read/write and fan-out traffic. Real large-scale systems handle this with a hybrid "fan-out on write" (pre-computing followers' feeds) for normal users, combined with "fan-out on read" (computing on the fly) specifically for celebrity accounts, to avoid the write-side hot-spot.
+
+### Q90. What specific techniques help avoid "hot partitions" in a sharded/partitioned schema, beyond just picking a high-cardinality key?
+**Answer:** Adding a random or hashed "salt" suffix to an otherwise sequential/popular key to spread its writes across multiple partitions (then aggregating across the salted partitions on read), using composite keys that combine a naturally distributing prefix with the actual entity ID, and actively monitoring per-partition load in production to catch emerging hot-spots (like a viral piece of content) before they cause an outage, applying targeted mitigation (dedicated capacity, caching) as needed.
+
+### Q91. How do you reason about the trade-off between optimizing a schema for reads versus for writes, and how does that show up concretely in design choices?
+**Answer:** Read-optimized schemas favor denormalization (fewer joins, pre-computed aggregates) and heavier indexing — at the cost of slower, more complex writes. Write-optimized schemas favor normalization (single source of truth, minimal redundancy) and fewer indexes — at the cost of more joins needed at read time. The right balance depends on your actual read:write ratio; a schema for a system doing 1000 reads per write should look very different from one doing 1000 writes per read.
+
+### Q92. How would you architect a system using CQRS with genuinely separate read and write databases (not just separate tables), and what does that buy you?
+**Answer:** Writes go to a primary database chosen for write correctness/throughput (e.g., a normalized PostgreSQL schema or an event store); a separate database technology entirely — chosen purely for read performance/shape, like Elasticsearch for search-heavy reads or a denormalized document store for a specific UI — is kept in sync asynchronously via events/CDC. This buys independent scaling and independent technology choices for each side, at the cost of managing eventual consistency and the added operational complexity of running/syncing two systems.
+
+### Q93. How would you design a schema/data pipeline to support real-time analytics (OLAP-style queries) without impacting the primary OLTP database's performance?
+**Answer:** Stream changes out of the OLTP database via CDC (rather than running heavy analytical queries directly against it), landing them in a separate analytical store (a columnar warehouse or OLAP engine) purpose-built for fast aggregation over large volumes — so dashboards and ad-hoc analytical queries never compete with or slow down the live application's transactional workload.
+
+### Q94. How does schema/constraint design help enforce API idempotency, beyond just application-level idempotency key checks?
+**Answer:** A unique constraint on a client-supplied idempotency key (combined with `INSERT ... ON CONFLICT DO NOTHING/UPDATE`) gives you a database-level guarantee against duplicate processing even under concurrent retries — relying purely on an application-level "check if it exists, then insert" without a database constraint has a race condition window that a unique constraint closes definitively.
+
+### Q95. What framework/approach would you use to structure your answer when asked to "design a database schema" in a system design interview?
+**Answer:** (1) Clarify requirements and scale (entities, key relationships, expected read/write volume and ratio). (2) Identify core entities and sketch the ER model. (3) Decide relational vs. NoSQL (or polyglot) based on the data shape and consistency needs. (4) Define tables/documents, keys, and relationships, calling out any deliberate denormalization and why. (5) Discuss indexing strategy based on the stated query patterns. (6) Address scaling (partitioning/sharding/replication) if scale requirements warrant it. (7) Mention trade-offs explicitly rather than presenting one "right" answer — interviewers want to see your reasoning.
+
+### Q96. In a system design interview, how would you justify choosing SQL vs. NoSQL for a specific prompt, e.g., "design Instagram"?
+**Answer:** You'd reason out loud about the actual data: user profiles/relationships (follows) and posts/comments have clear structure and relational integrity needs (a relational or graph database fits well for the social graph), while things like activity feeds or view/impression counts are extremely high-volume, latency-sensitive, and more tolerant of eventual consistency (favoring a NoSQL/key-value/cache-heavy approach) — a real system like Instagram uses multiple data stores together (polyglot persistence) rather than one single database for everything.
+
+### Q97. How would you approach and answer a schema-design trade-off question like "would you use a UUID or auto-increment integer as this table's primary key," showing strong reasoning rather than a memorized answer?
+**Answer:** State the relevant trade-offs concretely: auto-increment integers are smaller (better index/join performance), naturally sortable by creation order, but reveal row-count information and become a bottleneck/hot-spot if the system is later sharded. UUIDs are larger (worse raw index performance and storage), but can be generated independently on any node (no central sequence bottleneck) and don't leak business information — then state which you'd pick **given the specific requirements mentioned in the prompt** (e.g., "since this system needs to support future sharding across regions, I'd lean toward a UUID or similar despite the storage cost").
+
+### Q98. If asked to design the database layer for a Netflix/Uber/Instagram-style system in an interview, what's a strong high-level structure for your answer covering both schema and broader data architecture?
+**Answer:** Break it into: (1) core relational data with real ACID needs (user accounts, billing, subscriptions) → relational database. (2) High-volume, latency-critical operational data (like Uber's live driver locations, Netflix's viewing progress) → specialized fast stores (Redis, key-value). (3) Content/catalog data with flexible, evolving attributes (Netflix's video metadata, Instagram's post content) → document store or relational with JSON columns. (4) Search → dedicated search engine. (5) Analytics/recommendations → separate data warehouse/feature store fed via CDC/ETL, decoupled from the live transactional path. Emphasizing that a system like this genuinely uses several different data technologies together, each for what it does best.
+
+### Q99. What's a concise checklist of core database design principles worth having ready for any system design interview?
+**Answer:** Model the real-world entities and relationships accurately first, before worrying about scale. Normalize by default; denormalize deliberately and explain why. Index based on actual query patterns, not speculatively. Choose keys (natural vs. surrogate, sequential vs. random) with future scaling/sharding in mind. Pick SQL vs. NoSQL (or a mix) based on data shape and consistency needs, not trend. Plan for replication/backup/availability from the start, not as an afterthought. Always state trade-offs explicitly — there's rarely one single "correct" schema.
+
+### Q100. To wrap up: what's the single most important mindset to bring into any database design question, whether in an interview or in real production work?
+**Answer:** There is no universally "correct" schema — only a schema that's well-suited (or poorly-suited) to a **specific** set of requirements: expected scale, read/write patterns, consistency needs, and how the data will evolve. The strongest answer to almost any schema design question isn't reciting a memorized "best practice," but clearly reasoning through the actual trade-offs given the specific constraints in front of you, and being able to explain *why* you made each choice.
+
+---
+
+## Final Notes
+
+- **How to practice with this file:** Don't just read passively — for each question, try answering it out loud in your own words *before* reading the given answer, then compare. That's much closer to how a real interview feels than silent reading.
+- **For super-advanced rounds** (senior/staff-level or system design interviews), the Advanced and Super-Advanced tiers matter most — interviewers there are testing your *reasoning* and trade-off awareness, not memorized syntax.
+- **For screening rounds**, the Basic and Intermediate tiers cover almost everything you'll be asked.
+- All code snippets are meant to be adapted, not memorized verbatim — understanding *why* each piece of syntax exists will let you write correct code for a slightly different question the interviewer throws at you.
+
+Good luck with your interviews, Aknandan — you've got a solid, complete reference here across MongoDB, SQL, and database design fundamentals.
+
