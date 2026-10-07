@@ -15244,3 +15244,1347 @@ LIMIT 10;
 - [ ] Write unit and integration tests; explain mocks and flaky tests
 - [ ] Describe your AI-assisted workflow and 2–3 real stories of verifying AI output
 - [ ] Prepare 5 STAR stories
+
+
+
+
+# Final Revision Checklist — Model Answers
+
+Each checklist item from the Q&A guide, answered the way you would say it in an interview: short spoken answer first, then an example you can write or draw.
+
+**How to use:** Read the item, answer it out loud in 1–2 minutes without looking, then compare with the answer below. Tick the box only when you can do it from memory.
+
+---
+
+## 1. Explain the Node event loop and predict output order
+
+**Spoken answer:**
+"Node runs my JavaScript on a single thread. Slow I/O like network and file access is handed off to the operating system or libuv's thread pool, so the thread never waits. When an operation finishes, its callback is queued, and the event loop runs it once the call stack is empty.
+
+The loop has phases: **timers** (`setTimeout`, `setInterval`), **pending callbacks**, **poll** (I/O callbacks), **check** (`setImmediate`), and **close callbacks**. After each callback, Node empties two microtask queues: first `process.nextTick`, then promise callbacks (`.then`, code after `await`).
+
+So the order is: synchronous code → `nextTick` → promises → timers → `setImmediate`. Because there's one thread, CPU-heavy work blocks every request, so I move it to worker threads or a job queue."
+
+**Example — predict the output:**
+```js
+console.log('A');                                  // sync
+setTimeout(() => console.log('B'), 0);             // timers phase
+setImmediate(() => console.log('C'));              // check phase
+Promise.resolve().then(() => console.log('D'));    // promise microtask
+process.nextTick(() => console.log('E'));          // nextTick microtask
+(async () => {
+  console.log('F');                                // sync part of async fn
+  await null;
+  console.log('G');                                // promise microtask
+})();
+console.log('H');                                  // sync
+```
+**Output:** `A F H E D G B C`
+
+**How to reason:**
+1. Sync first, top to bottom: `A`, `F` (async function body runs sync until the first `await`), `H`.
+2. `process.nextTick` queue: `E`.
+3. Promise queue in order of scheduling: `D`, then `G`.
+4. Timers: `B`.
+5. Check: `C`. (In the main module `B`/`C` can swap; inside an I/O callback `setImmediate` always runs first.)
+
+**Trap question:** "What happens with `while(true){}` inside a request handler?" → The event loop is blocked; no other request, timer or callback ever runs.
+
+---
+
+## 2. Write async code in parallel with proper error handling
+
+**Spoken answer:**
+"If calls don't depend on each other, I start them together with `Promise.all` instead of awaiting one by one, which cuts total time to the slowest call. `Promise.all` fails fast if any call rejects, so I wrap it in `try/catch`. If partial results are acceptable, I use `Promise.allSettled` and handle failures individually. For large lists I limit concurrency so I don't overload the database or a third-party API, and I always put a timeout on network calls."
+
+**Example:**
+```ts
+// 1) All required: fail fast
+async function getDashboard(userId: string) {
+  try {
+    const [user, orders, wallet] = await Promise.all([
+      userRepo.findById(userId),
+      orderRepo.recentByUser(userId, 10),
+      walletService.getBalance(userId),
+    ]);
+    return { user, orders, wallet };
+  } catch (err) {
+    logger.error({ err, userId }, 'Dashboard load failed');
+    throw new AppError(503, 'DEPENDENCY_FAILED', 'Could not load dashboard');
+  }
+}
+
+// 2) Partial results OK: allSettled
+async function getHomePage(userId: string) {
+  const [profile, recs] = await Promise.allSettled([
+    userRepo.findById(userId),
+    recommendationService.forUser(userId), // non-critical
+  ]);
+  if (profile.status === 'rejected') throw profile.reason;
+  return {
+    profile: profile.value,
+    recommendations: recs.status === 'fulfilled' ? recs.value : [], // degrade gracefully
+  };
+}
+
+// 3) Many items: limit concurrency + timeout
+import pLimit from 'p-limit';
+const limit = pLimit(5);
+
+async function syncProjects(ids: string[]) {
+  const results = await Promise.allSettled(
+    ids.map(id => limit(() => fetch(`https://api.partner.com/projects/${id}`, {
+      signal: AbortSignal.timeout(3000),
+    }).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })))
+  );
+  const failed = results.filter(r => r.status === 'rejected').length;
+  logger.info({ total: ids.length, failed }, 'Project sync done');
+  return results;
+}
+```
+
+**Common mistakes to mention:** sequential `await` inside a `for` loop when calls are independent; forgetting `await` (unhandled rejection crashes Node 15+); `forEach(async ...)` (doesn't wait — use `for...of` or `Promise.all(map)`).
+
+---
+
+## 3. Explain goroutines, channels, context and race conditions in Go
+
+**Spoken answer:**
+"A **goroutine** is a lightweight function running concurrently, started with `go`. It begins with a ~2 KB stack, and the Go runtime schedules thousands of them onto a few OS threads.
+
+**Channels** let goroutines pass data safely. An unbuffered channel blocks until both sender and receiver are ready; a buffered one blocks only when full. `select` waits on several channels, which is how I do timeouts.
+
+**context.Context** carries cancellation, deadlines and request-scoped values. I pass it as the first argument to anything doing I/O, so if the client disconnects or the deadline passes, all downstream work stops.
+
+A **race condition** is when goroutines access shared data at the same time and at least one writes. I prevent it with a `sync.Mutex`, `sync/atomic`, or by passing data through channels instead of sharing it, and I detect it with `go test -race`."
+
+**Example — worker pool with context, channels and a mutex:**
+```go
+func ProcessOrders(ctx context.Context, orderIDs []int) (map[int]string, error) {
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    jobs := make(chan int)
+    results := make(map[int]string)
+    var mu sync.Mutex          // protects results
+    var wg sync.WaitGroup
+
+    for w := 0; w < 3; w++ {   // 3 workers
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for id := range jobs {
+                status, err := fetchStatus(ctx, id)
+                if err != nil {
+                    status = "error: " + err.Error()
+                }
+                mu.Lock()
+                results[id] = status
+                mu.Unlock()
+            }
+        }()
+    }
+
+    for _, id := range orderIDs {
+        select {
+        case jobs <- id:
+        case <-ctx.Done():       // stop sending if timed out
+            close(jobs)
+            wg.Wait()
+            return results, ctx.Err()
+        }
+    }
+    close(jobs)                  // workers' range loops end
+    wg.Wait()
+    return results, nil
+}
+```
+
+**Race example to explain:**
+```go
+counter := 0
+for i := 0; i < 1000; i++ {
+    go func() { counter++ }() // ❌ race: read-modify-write not atomic
+}
+// Fix: var counter atomic.Int64; counter.Add(1)   or protect with a mutex
+```
+
+---
+
+## 4. Choose correct HTTP methods and status codes; explain idempotency
+
+**Spoken answer:**
+"GET reads, POST creates or triggers an action, PUT replaces a whole resource, PATCH updates some fields, DELETE removes. **Idempotent** means doing it once or ten times leaves the same result: GET, PUT and DELETE are idempotent; POST isn't. That matters because clients and proxies retry on timeouts. To make POST safe to retry — for example a payment — the client sends an `Idempotency-Key`; the server stores the result for that key and returns the same response on a repeat instead of charging again.
+
+For status codes: 200 success, 201 created, 202 accepted for async work, 204 no content; 400 invalid input, 401 not authenticated, 403 not allowed, 404 not found, 409 conflict, 422 business validation failed, 429 rate limited; 500 server bug, 502/503/504 for upstream or overload problems."
+
+**Example — pick the method and code:**
+| Action | Request | Success | Common errors |
+|---|---|---|---|
+| List orders | `GET /v1/orders?status=paid` | 200 | 401 |
+| Place order | `POST /v1/orders` + `Idempotency-Key` | 201 + `Location` | 400, 409 out of stock |
+| Replace address | `PUT /v1/users/42/address` | 200 | 400, 404 |
+| Change name only | `PATCH /v1/users/42` | 200 | 400, 403 |
+| Cancel order | `POST /v1/orders/981/cancel` | 200 | 403, 404, 409 already shipped |
+| Delete draft | `DELETE /v1/drafts/7` | 204 | 404 |
+| Generate report | `POST /v1/reports` | 202 + job id | 429 |
+
+**Idempotency key in code:**
+```ts
+app.post('/v1/payments', async (req, res) => {
+  const key = req.header('Idempotency-Key');
+  if (!key) return res.status(400).json({ error: 'Idempotency-Key header required' });
+
+  const previous = await redis.get(`idem:${key}`);
+  if (previous) return res.status(201).json(JSON.parse(previous));   // replay, no new charge
+
+  if (!(await redis.set(`idem-lock:${key}`, '1', 'NX', 'EX', 30))) {
+    return res.status(409).json({ error: 'Same request already in progress' });
+  }
+  const payment = await payments.charge(req.body);
+  await redis.set(`idem:${key}`, JSON.stringify(payment), 'EX', 86_400);
+  res.status(201).json(payment);
+});
+```
+
+**401 vs 403 in one line:** 401 = "who are you?" (log in again); 403 = "I know you, but no."
+
+---
+
+## 5. Design REST URLs, pagination, versioning and error format
+
+**Spoken answer:**
+"URLs are plural nouns for resources, lowercase, no verbs, nested at most one level; filters, sorting and pagination go in query parameters. Actions that aren't CRUD become sub-resources like `/orders/{id}/cancel`.
+
+For pagination I prefer **cursor (keyset)** pagination for large or changing data: it uses an index, stays fast at any depth and doesn't skip or repeat rows when new data arrives. Offset pagination is fine for small admin tables where users jump to page numbers.
+
+I version in the URL (`/v1`) and only create a new version for breaking changes; adding optional fields isn't breaking. Old versions get a deprecation period.
+
+Every error uses one consistent shape: machine-readable code, human message, field details, and a request id that matches our logs."
+
+**Example — a full design for an orders API:**
+```
+GET    /v1/orders?status=paid&from=2026-09-01&sort=-createdAt&limit=20&cursor=eyJpZCI6OTgxfQ
+POST   /v1/orders
+GET    /v1/orders/981
+PATCH  /v1/orders/981
+POST   /v1/orders/981/cancel
+GET    /v1/users/42/orders
+```
+
+**Cursor pagination response and query:**
+```json
+{
+  "data": [{ "id": 980, "status": "paid", "total": 340, "createdAt": "2026-10-06T09:12:00Z" }],
+  "pagination": { "nextCursor": "eyJjIjoiMjAyNi0xMC0wNlQwOToxMjowMFoiLCJpZCI6OTgwfQ", "hasMore": true }
+}
+```
+```sql
+-- cursor decodes to (created_at, id) of the last row; index on (created_at DESC, id DESC)
+SELECT * FROM orders
+WHERE status = 'paid' AND (created_at, id) < ($1, $2)
+ORDER BY created_at DESC, id DESC
+LIMIT 21;  -- fetch one extra to know if hasMore
+```
+
+**Error format:**
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": [{ "field": "items[0].qty", "issue": "must be greater than 0" }],
+    "requestId": "req_7f3a9c"
+  }
+}
+```
+
+**Versioning:**
+```ts
+app.use('/v1', v1Router);
+app.use('/v2', v2Router);   // v2: totals in paise (integer) instead of rupees (decimal) = breaking
+// Response header on v1: Deprecation: true, Sunset: Wed, 01 Apr 2027 00:00:00 GMT
+```
+
+---
+
+## 6. Explain JWT access/refresh, OAuth 2.0 + PKCE, OIDC, RBAC, IDOR
+
+**Spoken answer:**
+"**JWT** is a signed token: header, payload with claims like `sub`, `role`, `exp`, and a signature. It's encoded, not encrypted, so no secrets go inside. I use a short-lived **access token** (about 15 minutes) on every request and a long-lived **refresh token** in an HttpOnly, Secure, SameSite cookie, stored hashed in the DB and rotated on every use. If an old refresh token is reused, I revoke the whole session because it was probably stolen. Logout revokes the refresh token.
+
+**OAuth 2.0** is delegated authorization: a user lets an app access their data on another service without sharing the password. The recommended flow is **Authorization Code with PKCE**: the app sends a hashed random `code_challenge`, gets back a short-lived code, then exchanges the code plus the original `code_verifier` for tokens — so an intercepted code is useless. **OIDC** sits on top of OAuth and adds an ID token for login, which is 'Sign in with Google'.
+
+**RBAC** gives users roles and roles permissions; code checks permissions, not role names. **IDOR** is when an API checks you're logged in but not that the record is yours — so changing the id in the URL exposes other users' data. I prevent it by scoping every query by owner or tenant."
+
+**Example — the pieces in code:**
+```ts
+// Access token
+const accessToken = jwt.sign({ sub: user.id, role: user.role }, PRIVATE_KEY,
+  { algorithm: 'RS256', expiresIn: '15m', issuer: 'shop-api' });
+
+// Verify middleware (pin algorithm)
+function requireAuth(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+  try {
+    req.user = jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'], issuer: 'shop-api' });
+    next();
+  } catch { res.status(401).json({ error: 'Invalid or expired token' }); }
+}
+
+// RBAC
+const PERMS = { user: ['orders:read:own'], support: ['orders:read:any'], admin: ['orders:read:any', 'orders:delete'] };
+const can = (perm) => (req, res, next) =>
+  PERMS[req.user.role]?.includes(perm) ? next() : res.status(403).json({ error: 'Forbidden' });
+
+// IDOR-safe read
+app.get('/v1/orders/:id', requireAuth, async (req, res) => {
+  const canReadAny = PERMS[req.user.role]?.includes('orders:read:any');
+  const order = canReadAny
+    ? await db.orders.findById(req.params.id)
+    : await db.orders.findOne({ id: req.params.id, userId: req.user.sub });  // owner scope
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  res.json(order);
+});
+```
+
+**PKCE flow (draw this):**
+```
+App: verifier = random(64);  challenge = base64url(sha256(verifier))
+App  → Auth server:  /authorize?response_type=code&client_id&redirect_uri&scope=openid email&state&code_challenge
+User logs in + consents
+Auth → App:  redirect_uri?code=abc&state=...
+App  → Auth server:  POST /token  code=abc + code_verifier=verifier
+Auth → App:  access_token (+ refresh_token, + id_token for OIDC)
+App  → API:  Authorization: Bearer access_token
+```
+
+---
+
+## 7. Structure a layered backend with central error handling and logging
+
+**Spoken answer:**
+"I organise code by feature module, and inside each module by layer: **routes/controllers** handle HTTP and validation only; **services** hold business rules and transactions; **repositories** contain database queries only. Dependencies are passed in, so services are easy to unit test with fakes.
+
+Errors: services throw typed `AppError`s with a status and code; one error middleware at the end turns them into the standard error response, maps known DB errors (unique violation → 409), and logs unexpected errors with the request id while returning a generic 500 — never a stack trace.
+
+Logging: structured JSON with a request id on every line (generated or taken from `X-Request-Id`), user id and duration; sensitive fields redacted. That id appears in error responses so support can find the exact logs."
+
+**Example — folder structure:**
+```
+src/
+  modules/orders/  order.routes.ts  order.controller.ts  order.service.ts  order.repository.ts  order.schema.ts
+  middleware/      requestId.ts  auth.ts  validate.ts  errorHandler.ts
+  lib/             db.ts  logger.ts  errors.ts
+  app.ts  server.ts
+```
+
+**Example — the core files:**
+```ts
+// lib/errors.ts
+export class AppError extends Error {
+  constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
+}
+
+// middleware/requestId.ts
+export function requestId(req, res, next) {
+  req.id = req.header('X-Request-Id') ?? crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  req.log = logger.child({ requestId: req.id });
+  next();
+}
+
+// modules/orders/order.service.ts
+export class OrderService {
+  constructor(private repo: OrderRepository) {}
+  async cancel(id: string, user: AuthUser) {
+    const order = await this.repo.findById(id);
+    if (!order) throw new AppError(404, 'NOT_FOUND', 'Order not found');
+    if (order.userId !== user.id && user.role !== 'admin') throw new AppError(403, 'FORBIDDEN', 'Not your order');
+    if (order.status !== 'pending') throw new AppError(409, 'INVALID_STATE', 'Only pending orders can be cancelled');
+    return this.repo.updateStatus(id, 'cancelled');
+  }
+}
+
+// modules/orders/order.controller.ts — HTTP only
+export const cancel = (svc: OrderService) => async (req, res) => {
+  const order = await svc.cancel(req.params.id, req.user);
+  req.log.info({ orderId: order.id }, 'Order cancelled');
+  res.json(toOrderResponse(order));
+};
+
+// middleware/errorHandler.ts — registered last
+export function errorHandler(err, req, res, _next) {
+  if (err instanceof ZodError) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: err.issues, requestId: req.id } });
+  if (err instanceof AppError) return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details, requestId: req.id } });
+  if (err?.code === '23505') return res.status(409).json({ error: { code: 'CONFLICT', message: 'Already exists', requestId: req.id } });
+  req.log.error({ err }, 'Unhandled error');
+  res.status(500).json({ error: { code: 'INTERNAL', message: 'Something went wrong', requestId: req.id } });
+}
+
+// app.ts
+app.use(requestId);
+app.use(express.json({ limit: '100kb' }));
+app.use('/v1/orders', orderRoutes);
+app.use(errorHandler);
+```
+
+---
+
+## 8. Write joins, GROUP BY/HAVING and window-function queries
+
+**Spoken answer:**
+"INNER JOIN keeps only matching rows; LEFT JOIN keeps every left row and fills NULLs, which is how I find 'customers with no orders'. GROUP BY collapses rows into groups for aggregates; WHERE filters rows before grouping and HAVING filters groups after. Window functions compute across related rows **without** collapsing them — ranking, running totals, comparing with the previous row."
+
+**Practice set with answers** (tables: `users(id, name, city)`, `orders(id, user_id, status, total, created_at)`, `order_items(order_id, product_id, qty, price)`, `products(id, name, category)`):
+
+```sql
+-- 1. Each order with the customer name (INNER JOIN)
+SELECT o.id, u.name, o.total
+FROM orders o JOIN users u ON u.id = o.user_id;
+
+-- 2. Customers who have never ordered (LEFT JOIN + IS NULL)
+SELECT u.id, u.name
+FROM users u LEFT JOIN orders o ON o.user_id = u.id
+WHERE o.id IS NULL;
+
+-- 3. Number of orders per customer, including zero
+SELECT u.name, COUNT(o.id) AS orders
+FROM users u LEFT JOIN orders o ON o.user_id = u.id
+GROUP BY u.id, u.name;
+
+-- 4. Cities with more than 50 paid orders this year (WHERE vs HAVING)
+SELECT u.city, COUNT(*) AS paid_orders
+FROM orders o JOIN users u ON u.id = o.user_id
+WHERE o.status = 'paid' AND o.created_at >= '2026-01-01'
+GROUP BY u.city
+HAVING COUNT(*) > 50
+ORDER BY paid_orders DESC;
+
+-- 5. Revenue per category (three-table join)
+SELECT p.category, SUM(oi.qty * oi.price) AS revenue
+FROM order_items oi
+JOIN products p ON p.id = oi.product_id
+JOIN orders o ON o.id = oi.order_id
+WHERE o.status = 'paid'
+GROUP BY p.category;
+
+-- 6. Top 3 customers by spend in each city (window: rank within partition)
+SELECT * FROM (
+  SELECT u.city, u.name, SUM(o.total) AS spend,
+         DENSE_RANK() OVER (PARTITION BY u.city ORDER BY SUM(o.total) DESC) AS rnk
+  FROM orders o JOIN users u ON u.id = o.user_id
+  WHERE o.status = 'paid'
+  GROUP BY u.city, u.name
+) t
+WHERE rnk <= 3;
+
+-- 7. Each customer's latest order (ROW_NUMBER)
+SELECT * FROM (
+  SELECT o.*, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+  FROM orders o
+) t WHERE rn = 1;
+
+-- 8. Daily revenue with running total and day-over-day change
+SELECT day, revenue,
+       SUM(revenue) OVER (ORDER BY day)          AS running_total,
+       revenue - LAG(revenue) OVER (ORDER BY day) AS change_vs_prev_day
+FROM (
+  SELECT date_trunc('day', created_at) AS day, SUM(total) AS revenue
+  FROM orders WHERE status = 'paid' GROUP BY 1
+) d
+ORDER BY day;
+
+-- 9. Second-highest order total
+SELECT DISTINCT total FROM orders ORDER BY total DESC OFFSET 1 LIMIT 1;
+```
+
+**Remember:** execution order `FROM → JOIN → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT`; `RANK` leaves gaps after ties, `DENSE_RANK` doesn't, `ROW_NUMBER` is always unique.
+
+---
+
+## 9. Explain indexes, composite index order, ACID, isolation levels and locking
+
+**Spoken answer:**
+"An **index** is usually a B-tree that keeps values sorted with pointers to rows, so lookups are O(log n) instead of scanning the table. It speeds reads and slows writes, so I index columns used in WHERE, JOIN and ORDER BY — especially foreign keys.
+
+A **composite index** `(a, b, c)` is sorted by a, then b, then c, so it helps queries on a, a+b or a+b+c, but not b alone — the leftmost-prefix rule. I put equality columns first and range/sort columns last.
+
+**ACID**: Atomicity — all or nothing; Consistency — constraints always hold; Isolation — concurrent transactions don't see each other's partial work; Durability — committed data survives a crash.
+
+**Isolation levels** trade safety for concurrency: Read Committed (Postgres default) stops dirty reads; Repeatable Read also stops non-repeatable reads; Serializable stops everything but may abort transactions, so the app retries.
+
+**Locking**: pessimistic locking with `SELECT ... FOR UPDATE` when conflicts are common, like stock or balances; optimistic locking with a version column when conflicts are rare. To avoid deadlocks I lock rows in a consistent order and keep transactions short."
+
+**Example — composite index order:**
+```sql
+-- Query pattern: a user's orders filtered by status, newest first
+CREATE INDEX idx_orders_user_status_created ON orders (user_id, status, created_at DESC);
+
+SELECT * FROM orders WHERE user_id = 42 AND status = 'paid' ORDER BY created_at DESC LIMIT 20;  -- ✅ uses index fully
+SELECT * FROM orders WHERE user_id = 42;                                                          -- ✅ leftmost prefix
+SELECT * FROM orders WHERE status = 'paid';                                                       -- ❌ can't use it
+```
+
+**Example — anomalies table to draw:**
+| Level | Dirty read | Non-repeatable read | Phantom |
+|---|---|---|---|
+| Read Uncommitted | yes | yes | yes |
+| Read Committed | no | yes | yes |
+| Repeatable Read | no | no | yes (Postgres: no) |
+| Serializable | no | no | no |
+
+**Example — pessimistic vs optimistic:**
+```sql
+-- Pessimistic: transfer money
+BEGIN;
+SELECT id, balance FROM accounts WHERE id IN (1, 2) ORDER BY id FOR UPDATE;  -- consistent order avoids deadlock
+UPDATE accounts SET balance = balance - 500 WHERE id = 1 AND balance >= 500;
+UPDATE accounts SET balance = balance + 500 WHERE id = 2;
+COMMIT;
+
+-- Optimistic: edit a profile
+UPDATE profiles SET bio = 'New bio', version = version + 1
+WHERE id = 42 AND version = 7;
+-- 0 rows updated → someone else changed it → return 409, client reloads
+```
+
+---
+
+## 10. Read an `EXPLAIN ANALYZE` plan and fix N+1 queries
+
+**Spoken answer:**
+"`EXPLAIN ANALYZE` runs the query and shows the real plan with timings. I read it from the innermost node outward and look for: a **Seq Scan** on a big table where I expected an index, a large gap between **estimated and actual rows** (stale statistics — run `ANALYZE`), expensive **Sort** nodes, and **Nested Loops** over many rows. Then I add or fix the index, rewrite the condition so the index can be used, and measure again.
+
+The **N+1 problem** is fetching a list with one query, then one more query per item — 100 rows become 101 queries. I fix it with a JOIN, a single `WHERE id = ANY(...)` query, or the ORM's eager loading."
+
+**Example — reading a plan:**
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM orders WHERE user_id = 42 ORDER BY created_at DESC LIMIT 20;
+```
+```
+Before:
+Limit  (actual time=2381.4..2381.5 rows=20)
+  -> Sort  (Sort Key: created_at DESC)  Sort Method: top-N heapsort
+       -> Seq Scan on orders  (rows=8,000,000)  Filter: (user_id = 42)  Rows Removed by Filter: 7,999,850
+Execution Time: 2381.9 ms
+```
+**Diagnosis:** sequential scan over 8M rows + sort. **Fix:**
+```sql
+CREATE INDEX CONCURRENTLY idx_orders_user_created ON orders (user_id, created_at DESC);
+```
+```
+After:
+Limit  (actual time=0.05..0.21 rows=20)
+  -> Index Scan using idx_orders_user_created on orders  Index Cond: (user_id = 42)
+Execution Time: 0.3 ms
+```
+
+**Index-killing rewrite:**
+```sql
+-- ❌ function on column, index on created_at unused
+WHERE DATE(created_at) = '2026-10-01'
+-- ✅ range keeps the index usable
+WHERE created_at >= '2026-10-01' AND created_at < '2026-10-02'
+```
+
+**Example — N+1 and the fix:**
+```ts
+// ❌ 1 + N queries
+const orders = (await db.query('SELECT * FROM orders ORDER BY id DESC LIMIT 100')).rows;
+for (const o of orders) {
+  o.user = (await db.query('SELECT id, name FROM users WHERE id = $1', [o.user_id])).rows[0];
+}
+
+// ✅ fix A: one JOIN
+const rows = (await db.query(`
+  SELECT o.*, u.name AS user_name
+  FROM orders o JOIN users u ON u.id = o.user_id
+  ORDER BY o.id DESC LIMIT 100`)).rows;
+
+// ✅ fix B: two queries, batched
+const ids = [...new Set(orders.map(o => o.user_id))];
+const users = (await db.query('SELECT id, name FROM users WHERE id = ANY($1)', [ids])).rows;
+const byId = new Map(users.map(u => [u.id, u]));
+orders.forEach(o => (o.user = byId.get(o.user_id)));
+
+// ORM equivalents: Prisma include, Sequelize include, Mongoose populate (+ lean)
+```
+
+**How to spot N+1 in production:** traces show the same query repeated dozens of times inside one request; query count per request metric spikes.
+
+---
+
+## 11. Model data in MongoDB (embed vs reference) and use aggregation
+
+**Spoken answer:**
+"In MongoDB I design around how the data is read. I **embed** when data is read together, belongs to the parent and is bounded — order line items inside an order. I **reference** when data grows without limit, is shared, or changes independently — activity logs or users referenced by orders. Documents are capped at 16 MB, so unbounded arrays are a red flag. I often copy a few frequently read fields (extended reference), like the customer's name on the order, to avoid lookups.
+
+For reporting I use the **aggregation pipeline**: `$match` first so it uses an index, then `$group`, `$sort`, `$limit`, and `$lookup` only on the small final result."
+
+**Example — schema:**
+```js
+// orders: embed items (bounded, read together) + extended reference to customer
+{
+  _id: ObjectId("..."),
+  customer: { _id: ObjectId("u42"), name: "Asha" },   // copied name for display
+  status: "paid",
+  items: [
+    { productId: ObjectId("p1"), name: "Pen",  qty: 2, price: 20 },
+    { productId: ObjectId("p2"), name: "Book", qty: 1, price: 300 }
+  ],
+  total: 340,
+  region: "NCR",
+  createdAt: ISODate("2026-09-15T10:00:00Z")
+}
+
+// activity_logs: separate collection (unbounded), referenced by userId
+{ _id: ObjectId("..."), userId: ObjectId("u42"), action: "order.placed", at: ISODate("...") }
+
+// Indexes (ESR: Equality, Sort, Range)
+db.orders.createIndex({ status: 1, createdAt: -1 });
+db.orders.createIndex({ "customer._id": 1, createdAt: -1 });
+db.activity_logs.createIndex({ at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 }); // TTL 90 days
+```
+
+**Example — aggregation: revenue and top products per region for September:**
+```js
+db.orders.aggregate([
+  { $match: { status: "paid", createdAt: { $gte: ISODate("2026-09-01"), $lt: ISODate("2026-10-01") } } },
+  { $unwind: "$items" },
+  { $group: {
+      _id: { region: "$region", product: "$items.name" },
+      units: { $sum: "$items.qty" },
+      revenue: { $sum: { $multiply: ["$items.qty", "$items.price"] } }
+  } },
+  { $sort: { "_id.region": 1, revenue: -1 } },
+  { $group: {
+      _id: "$_id.region",
+      regionRevenue: { $sum: "$revenue" },
+      topProducts: { $push: { name: "$_id.product", revenue: "$revenue" } }
+  } },
+  { $project: { _id: 0, region: "$_id", regionRevenue: 1, topProducts: { $slice: ["$topProducts", 3] } } },
+  { $sort: { regionRevenue: -1 } }
+]);
+```
+
+**Check performance:** `db.orders.find({...}).explain("executionStats")` → want `IXSCAN` and `totalDocsExamined ≈ nReturned`, not `COLLSCAN`.
+
+
+---
+
+## 12. Implement cache-aside with Redis; explain invalidation, stampede, rate limiting
+
+**Spoken answer:**
+"With **cache-aside**, the app checks Redis first; on a miss it reads the database, stores the result with a TTL, and returns it. On updates I write the database first, then **delete** the cache key, so the next read refills fresh data. Every key has a TTL with random jitter as a safety net.
+
+A **cache stampede** is when a hot key expires and thousands of requests hit the database at once. I prevent it with a short lock so only one request rebuilds the value, plus TTL jitter or early refresh. For keys that don't exist, I cache the 'not found' result briefly to stop cache penetration.
+
+For **rate limiting**, I keep counters in Redis so all app instances share them: a fixed window with `INCR` + `EXPIRE` is simplest; a sliding window with a sorted set or a token bucket is smoother. Over the limit returns 429 with `Retry-After`."
+
+**Example — cache-aside with stampede protection and invalidation:**
+```ts
+const TTL = 300;
+
+export async function getProduct(id: string): Promise<Product | null> {
+  const key = `product:${id}`;
+  const cached = await redis.get(key);
+  if (cached) return cached === 'null' ? null : JSON.parse(cached);
+
+  // only one request rebuilds
+  const gotLock = await redis.set(`lock:${key}`, '1', 'NX', 'EX', 5);
+  if (!gotLock) {
+    await new Promise(r => setTimeout(r, 50));
+    return getProduct(id);                                // retry, will likely hit cache
+  }
+  try {
+    const product = await productRepo.findById(id);
+    const ttl = product ? TTL + Math.floor(Math.random() * 60) : 30;  // jitter; short TTL for misses
+    await redis.set(key, product ? JSON.stringify(product) : 'null', 'EX', ttl);
+    return product;
+  } finally {
+    await redis.del(`lock:${key}`);
+  }
+}
+
+export async function updateProduct(id: string, data: Partial<Product>) {
+  const updated = await productRepo.update(id, data);   // 1. write DB (commit)
+  await redis.del(`product:${id}`);                       // 2. then invalidate
+  return updated;
+}
+```
+
+**Example — rate limiter middleware (fixed window):**
+```ts
+export function rateLimit(limit: number, windowSec: number) {
+  return async (req, res, next) => {
+    const id = req.user?.id ?? req.ip;
+    const window = Math.floor(Date.now() / 1000 / windowSec);
+    const key = `rl:${req.path}:${id}:${window}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, windowSec);
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - count));
+    if (count > limit) {
+      res.setHeader('Retry-After', windowSec);
+      return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests' } });
+    }
+    next();
+  };
+}
+app.post('/v1/auth/login', rateLimit(5, 900), login);   // 5 attempts per 15 min
+app.use('/v1', rateLimit(100, 60));                      // 100 req/min general
+```
+
+**Why delete instead of update the cache?** Two concurrent updates can write the cache in the wrong order and leave stale data; deleting avoids that because the next read loads the committed value.
+
+---
+
+## 13. Build a React page with hooks, data fetching and protected routes
+
+**Spoken answer:**
+"I keep server data in TanStack Query, which handles loading, errors, caching and refetching; local UI state goes in `useState`. Auth lives in a context with a `useAuth` hook. Protected routes check the user before rendering and redirect to login; admin routes also check the role — but the backend still enforces permissions, the frontend check is only for user experience. After a mutation, I invalidate the related query so the list refreshes."
+
+**Example — complete page:**
+```tsx
+// auth/AuthContext.tsx
+const AuthContext = createContext<{ user: User | null; login: (e: string, p: string) => Promise<void>; logout: () => void } | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const login = async (email: string, password: string) => {
+    const { data } = await api.post('/v1/auth/login', { email, password });
+    setAccessToken(data.accessToken);
+    setUser(data.user);
+  };
+  const logout = () => { api.post('/v1/auth/logout'); setAccessToken(null); setUser(null); };
+  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+}
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
+};
+
+// routes/ProtectedRoute.tsx
+export function ProtectedRoute({ role }: { role?: 'admin' }) {
+  const { user } = useAuth();
+  const location = useLocation();
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (role && user.role !== role) return <Navigate to="/forbidden" replace />;
+  return <Outlet />;
+}
+
+// pages/OrdersPage.tsx
+export function OrdersPage() {
+  const [status, setStatus] = useState<'all' | 'pending' | 'paid'>('all');
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['orders', status],
+    queryFn: () => api.get('/v1/orders', { params: status === 'all' ? {} : { status } }).then(r => r.data.data as Order[]),
+    staleTime: 30_000,
+  });
+
+  const cancel = useMutation({
+    mutationFn: (id: number) => api.post(`/v1/orders/${id}/cancel`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['orders'] }),
+  });
+
+  if (isLoading) return <p>Loading…</p>;
+  if (error) return <p role="alert">Could not load orders.</p>;
+
+  return (
+    <section>
+      <select value={status} onChange={e => setStatus(e.target.value as any)}>
+        <option value="all">All</option><option value="pending">Pending</option><option value="paid">Paid</option>
+      </select>
+      <ul>
+        {data!.map(o => (
+          <li key={o.id}>
+            #{o.id} — ₹{o.total} — {o.status}
+            {o.status === 'pending' && (
+              <button disabled={cancel.isPending} onClick={() => cancel.mutate(o.id)}>Cancel</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// App.tsx
+<AuthProvider>
+  <QueryClientProvider client={queryClient}>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/orders" element={<OrdersPage />} />
+      </Route>
+      <Route element={<ProtectedRoute role="admin" />}>
+        <Route path="/admin" element={<AdminPage />} />
+      </Route>
+    </Routes>
+  </QueryClientProvider>
+</AuthProvider>
+```
+
+**Be ready to explain:** why `key={o.id}` not index; what the `useEffect` dependency array does; why invalidating the query refreshes the list; how an axios interceptor refreshes an expired access token on 401 and retries once.
+
+---
+
+## 14. Walk through a system design using the 7-step framework
+
+**Spoken answer (the framework):**
+1. **Requirements** — functional and non-functional (scale, latency, availability, consistency). Ask questions.
+2. **Estimates** — requests per second, storage, read/write ratio.
+3. **API** — the main endpoints.
+4. **Data model** — entities, SQL or NoSQL and why, indexes.
+5. **High-level design** — draw the boxes and arrows.
+6. **Deep dive** — the hardest part.
+7. **Failures and trade-offs** — what breaks, how to detect and recover, what I'd improve.
+
+**Worked example — "Design a notification system (email, SMS, push)":**
+
+**1. Requirements**
+- Functional: other services send notifications by event or API; channels email/SMS/push; templates; user preferences (opt-out); delivery status tracking.
+- Non-functional: 10M notifications/day; OTPs delivered in < 10 s; no duplicates; at-least-once delivery; survives provider outages.
+
+**2. Estimates**
+- 10M/day ÷ 10⁵ s ≈ **100/s average**, peak ~10x = **1,000/s** (sales campaigns).
+- Each record ~1 KB → 10 GB/day → keep 90 days ≈ 1 TB (partition by date).
+
+**3. API**
+```
+POST /v1/notifications
+{ "userId": 42, "template": "order_shipped", "channels": ["email","push"],
+  "data": { "orderId": 981 }, "priority": "normal", "idempotencyKey": "order-981-shipped" }
+→ 202 { "notificationId": "n_123" }
+
+GET /v1/notifications/n_123 → { "status": { "email": "delivered", "push": "sent" } }
+```
+
+**4. Data model**
+- `notifications(id, user_id, template, priority, idempotency_key UNIQUE, created_at)`
+- `deliveries(id, notification_id, channel, provider, status, attempts, last_error, updated_at)` — index on `(notification_id)`, `(status, updated_at)`
+- `user_preferences(user_id, channel, enabled)` — cached in Redis
+- Postgres is fine: moderate write rate, needs constraints; partition `deliveries` by month.
+
+**5. High-level design**
+```
+Producers (Order, Auth, Marketing)
+   │ events / POST
+   ▼
+API Gateway → Notification API ──► Postgres (notifications, deliveries)
+                  │  checks prefs (Redis), renders template
+                  ▼
+        Queues per channel & priority (email-high, email-low, sms-high, push…)
+                  ▼
+        Channel workers (autoscaled on queue depth)
+                  ▼
+        Providers: SES / Twilio / FCM  (+ backup provider)
+                  │ delivery webhooks
+                  ▼
+        Webhook handler → update deliveries status
+```
+
+**6. Deep dive — reliability of sending**
+- **Idempotency**: unique `idempotency_key` stops duplicate requests; workers check delivery status before sending, so a retried job doesn't resend.
+- **Retries** with exponential backoff for transient provider errors; after N attempts → **dead-letter queue** + alert.
+- **Priorities**: OTPs on a separate high-priority queue with dedicated workers so marketing bursts never delay them.
+- **Provider rate limits**: token bucket per provider in Redis.
+- **Outbox** in producer services so "order shipped" in the DB always results in a notification event.
+
+**7. Failures and trade-offs**
+- Provider down → **circuit breaker** opens → fail over to the backup provider.
+- Queue backlog → autoscale workers; shed low-priority marketing first.
+- Redis down → read preferences from Postgres (slower but correct).
+- Trade-off: at-least-once + idempotency instead of expensive exactly-once.
+- Monitoring: queue depth, send latency p95 per channel, failure rate per provider, DLQ size.
+
+**Other problems to practise with the same 7 steps:** URL shortener, rate limiter, chat app, e-commerce checkout, news feed, file upload service.
+
+---
+
+## 15. Explain queues, Kafka vs RabbitMQ, outbox, saga, WebSockets vs SSE, serverless
+
+**Spoken answers, one per topic:**
+
+**Queues:** "A queue decouples the producer from the consumer: the API puts a job on the queue and returns quickly; workers process it with retries. It absorbs traffic spikes and keeps working when a downstream service is slow. Delivery is usually at-least-once, so consumers must be idempotent, and messages that keep failing go to a dead-letter queue."
+
+**Kafka vs RabbitMQ:**
+| | RabbitMQ | Kafka |
+|---|---|---|
+| Model | Broker routes messages to queues | Distributed append-only log |
+| After consume | Message deleted on ack | Message kept for retention period; can replay |
+| Ordering | Per queue | Per partition (use a key like `orderId`) |
+| Scale | High | Very high throughput |
+| Use | Task queues, routing, request/reply | Event streaming, many independent consumers, analytics |
+
+**Outbox:** "If I save an order and then publish an event, a crash in between leaves them inconsistent. With the outbox pattern I insert the order and an outbox row in the same transaction; a relay publishes outbox rows to the broker and marks them sent. Consumers deduplicate by event id."
+
+**Saga:** "A business transaction across services as a chain of local transactions, each with a compensating action. Reserve stock → charge payment → if payment fails, release stock and cancel the order. Choreography uses events between services; orchestration uses a central coordinator, which is easier to follow for complex flows."
+
+**WebSockets vs SSE:** "SSE is a one-way server-to-client stream over plain HTTP with automatic reconnect — great for notifications, live status, and streaming AI responses. WebSockets are full-duplex persistent connections — for chat, collaboration, games. To scale WebSockets across servers I broadcast through Redis Pub/Sub and use sticky sessions."
+
+**Serverless:** "Functions run on events and scale automatically, including to zero; you pay per use. Good for spiky or event-driven work like processing uploads or webhooks. Downsides: cold starts, execution time limits, statelessness, database connection exhaustion, and vendor lock-in."
+
+**Example — outbox + idempotent consumer:**
+```ts
+// Producer: one transaction
+await withTransaction(async (tx) => {
+  await tx.query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
+  await tx.query(
+    "INSERT INTO outbox (id, type, payload) VALUES (gen_random_uuid(), 'OrderPaid', $1)",
+    [JSON.stringify({ orderId })]
+  );
+});
+
+// Relay (every second)
+const { rows } = await db.query(
+  'SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED');
+for (const e of rows) {
+  await kafka.send({ topic: 'orders', messages: [{ key: e.payload.orderId.toString(), value: JSON.stringify({ id: e.id, type: e.type, ...e.payload }) }] });
+  await db.query('UPDATE outbox SET sent_at = now() WHERE id = $1', [e.id]);
+}
+
+// Consumer: skip duplicates
+async function onOrderPaid(event) {
+  const r = await db.query('INSERT INTO processed_events (id) VALUES ($1) ON CONFLICT DO NOTHING', [event.id]);
+  if (r.rowCount === 0) return;            // already handled
+  await inventory.confirmReservation(event.orderId);
+}
+```
+
+**Example — saga steps (draw this):**
+```
+Order: PENDING ─► Inventory: reserve ─► Payment: charge ─► Order: CONFIRMED
+                      │ fail                  │ fail
+                      ▼                       ▼
+                 Order: CANCELLED     Inventory: release ─► Order: CANCELLED
+```
+
+---
+
+## 16. Write a multi-stage Dockerfile, Compose file and CI workflow
+
+**Spoken answer:**
+"The Dockerfile uses a build stage with dev dependencies to compile TypeScript, then copies only the compiled output and production dependencies into a slim runtime image that runs as a non-root user. I copy `package*.json` and install before copying source so layer caching avoids reinstalling on every code change. Compose runs the API, worker, Postgres and Redis locally with health checks. CI runs lint, type-check and tests against real Postgres and Redis service containers on every PR, then builds and pushes an image tagged with the git SHA on merge to main."
+
+**Dockerfile:**
+```dockerfile
+# ---- build ----
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build && npm prune --omit=dev
+
+# ---- runtime ----
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s CMD wget -qO- http://localhost:3000/health/live || exit 1
+CMD ["node", "dist/server.js"]
+```
+
+**.dockerignore:**
+```
+node_modules
+dist
+.git
+.env
+coverage
+```
+
+**docker-compose.yml:**
+```yaml
+services:
+  api:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://app:secret@db:5432/shop
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment:
+      DATABASE_URL: postgres://app:secret@db:5432/shop
+      REDIS_URL: redis://redis:6379
+    depends_on: [db, redis]
+  db:
+    image: postgres:16
+    environment: { POSTGRES_USER: app, POSTGRES_PASSWORD: secret, POSTGRES_DB: shop }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U app"], interval: 5s, retries: 5 }
+  redis:
+    image: redis:7-alpine
+volumes:
+  pgdata:
+```
+
+**.github/workflows/ci.yml:**
+```yaml
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: app, POSTGRES_PASSWORD: test, POSTGRES_DB: shop_test }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U app" --health-interval 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgres://app:test@localhost:5432/shop_test
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run migrate
+      - run: npm test -- --coverage
+      - run: npm audit --audit-level=high
+
+  build-and-push:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+```
+
+---
+
+## 17. Explain Kubernetes objects, probes and debugging commands
+
+**Spoken answer:**
+"A **Pod** is one or more containers sharing a network; a **Deployment** keeps N replicas running and does rolling updates and rollbacks through ReplicaSets; a **Service** gives pods a stable name and load-balances to them; an **Ingress** routes external HTTP traffic by host and path; **ConfigMaps** and **Secrets** inject configuration; an **HPA** scales replicas on CPU or custom metrics. StatefulSets are for databases, Jobs and CronJobs for batch work.
+
+**Probes:** readiness decides if a pod receives traffic — it fails while warming up or when it can't serve; liveness decides if a pod is stuck and must be restarted — I keep it simple and don't check the database there, or a DB outage would restart every pod; a startup probe gives slow apps time to boot.
+
+**Requests** are reserved resources for scheduling; **limits** are the maximum. Exceeding the CPU limit throttles; exceeding the memory limit gets the container OOMKilled."
+
+**Debugging walkthrough — "pods keep restarting":**
+```bash
+kubectl get pods -n shop
+# order-api-6f7c9-x2k  0/1  CrashLoopBackOff  5  3m
+
+kubectl describe pod order-api-6f7c9-x2k -n shop
+# Events: Back-off restarting failed container / Last State: OOMKilled / Liveness probe failed
+
+kubectl logs order-api-6f7c9-x2k -n shop --previous
+# Error: DATABASE_URL is required   ← config problem
+
+kubectl get configmap order-api-config -n shop -o yaml
+kubectl exec -it order-api-6f7c9-abc -n shop -- sh     # inspect a running pod
+kubectl top pods -n shop                               # CPU / memory usage
+kubectl rollout history deployment/order-api -n shop
+kubectl rollout undo deployment/order-api -n shop      # quick rollback
+```
+
+**Status cheat sheet:**
+| Status | Usual cause |
+|---|---|
+| `CrashLoopBackOff` | App exits on start: missing config, bad migration, exception |
+| `ImagePullBackOff` | Wrong image tag or missing registry credentials |
+| `Pending` | Not enough CPU/memory in cluster, or unbound volume |
+| `OOMKilled` | Memory limit too low or a memory leak |
+| Running but 0/1 Ready | Readiness probe failing |
+
+**Probe config:**
+```yaml
+readinessProbe:
+  httpGet: { path: /health/ready, port: 3000 }   # checks DB + Redis reachable
+  periodSeconds: 5
+livenessProbe:
+  httpGet: { path: /health/live, port: 3000 }    # just "process responds"
+  initialDelaySeconds: 10
+  periodSeconds: 10
+resources:
+  requests: { cpu: "250m", memory: "256Mi" }
+  limits:   { cpu: "1",    memory: "512Mi" }
+```
+
+---
+
+## 18. Name the OWASP API Top 10 and defences
+
+**Spoken answer (memorise as 10 short lines):**
+| # | Risk | Defence |
+|---|---|---|
+| 1 | **Broken Object Level Authorization** (IDOR) | Scope every query by owner/tenant; check access per object |
+| 2 | **Broken Authentication** | bcrypt/Argon2, short-lived tokens, refresh rotation, MFA, login rate limits |
+| 3 | **Broken Object Property Level Authorization** | Allow-list input fields (no mass assignment); response DTOs (no extra data) |
+| 4 | **Unrestricted Resource Consumption** | Rate limits, max page size, body size limits, timeouts, upload limits |
+| 5 | **Broken Function Level Authorization** | Permission check on every admin/privileged route; deny by default |
+| 6 | **Unrestricted Access to Sensitive Business Flows** | Bot protection, per-user limits on signup, coupons, bookings |
+| 7 | **Server-Side Request Forgery** | Allow-list outbound domains; block private IPs and cloud metadata |
+| 8 | **Security Misconfiguration** | Helmet headers, strict CORS, no stack traces, patched dependencies |
+| 9 | **Improper Inventory Management** | Track every API version/host; retire old and test endpoints |
+| 10 | **Unsafe Consumption of APIs** | Validate third-party responses, timeouts, TLS, treat as untrusted |
+
+**Also mention classic web risks:** SQL/NoSQL injection (parameterised queries, schema validation), XSS (output escaping, CSP), CSRF (SameSite cookies, CSRF tokens).
+
+**Example — three fixes in code:**
+```ts
+// API1: IDOR
+const order = await db.orders.findOne({ id: req.params.id, userId: req.user.id });
+if (!order) return res.status(404).end();
+
+// API3: mass assignment
+const UpdateProfile = z.object({ name: z.string().max(100), phone: z.string().max(15).optional() }).strict();
+await db.users.update(req.user.id, UpdateProfile.parse(req.body));   // "role" in body → 400
+
+// API4: resource consumption
+app.use(express.json({ limit: '100kb' }));
+const limit = Math.min(Number(req.query.limit) || 20, 100);          // cap page size
+```
+
+---
+
+## 19. Explain logs vs metrics vs traces, PromQL basics, OpenTelemetry, SLOs
+
+**Spoken answer:**
+"**Metrics** tell me *that* something is wrong — error rate or p95 latency is up — and are cheap to store and alert on. **Traces** tell me *where* — which service, query or external call in the request was slow. **Logs** tell me *what exactly* happened in that request. I link them by putting the trace id in every log line.
+
+Prometheus scrapes `/metrics` from each service. Counters only go up — I use `rate()` on them; gauges go up and down; histograms give percentiles with `histogram_quantile`. I use p95/p99 instead of averages because averages hide slow requests.
+
+**OpenTelemetry** is the vendor-neutral standard for traces, metrics and logs: auto-instrumentation for HTTP, Express, Postgres and Redis, context propagated with the `traceparent` header, exported through the OTel Collector to Jaeger, Tempo or any vendor.
+
+An **SLI** is what I measure, like % of requests under 300 ms; the **SLO** is the target, like 99.5% over 30 days; the **SLA** is the external contract. The **error budget** is the 0.5% we're allowed to fail; if we burn it, we slow releases and fix reliability."
+
+**PromQL cheat sheet:**
+```promql
+# Traffic: requests per second by route
+sum(rate(http_request_duration_seconds_count[5m])) by (route)
+
+# Errors: % of 5xx responses
+100 * sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+    / sum(rate(http_request_duration_seconds_count[5m]))
+
+# Latency: p95
+histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+# Saturation: DB pool in use
+max(db_pool_connections_in_use) / max(db_pool_connections_max)
+```
+
+**Example — debugging story using all three:**
+```
+1. Alert: p95 latency of /v1/orders > 1 s for 10 min  (metric)
+2. Grafana: spike started at 14:05, right after deploy 3f9c2a1
+3. Trace for a slow request: span "SELECT order_items ..." repeated 100 times  (trace → N+1)
+4. Logs filtered by that traceId show the new "include items" code path  (logs)
+5. Fix: batch query; p95 back to 120 ms
+```
+
+**SLO math:** 99.5% monthly → 0.5% × 30 days × 24 h ≈ **3.6 hours** of allowed failure per month.
+
+---
+
+## 20. Write unit and integration tests; explain mocks and flaky tests
+
+**Spoken answer:**
+"Unit tests check one piece of logic in isolation with dependencies faked — they're fast and cover business rules and edge cases. Integration tests run the real API against a real Postgres and Redis in containers, checking that layers work together. I mock things I don't control — payment provider, email, SMS — but not my own database in integration tests, because that hides real bugs.
+
+Flaky tests pass and fail randomly. Common causes are shared data between tests, depending on test order, real time or timezones, real network calls, and fixed sleeps. I fix them by resetting data per test, faking time, mocking external services, and waiting for conditions instead of sleeping."
+
+**Unit test (Vitest):**
+```ts
+describe('calculateTotal', () => {
+  it('applies 10% gold discount capped at ₹500', () => {
+    expect(calculateTotal([{ price: 1000, qty: 1 }], 'gold')).toBe(900);
+    expect(calculateTotal([{ price: 10000, qty: 1 }], 'gold')).toBe(9500);
+  });
+  it('returns 0 for an empty cart', () => {
+    expect(calculateTotal([], 'regular')).toBe(0);
+  });
+});
+
+describe('OrderService.place', () => {
+  it('sends a confirmation email after creating the order', async () => {
+    const repo = { create: vi.fn().mockResolvedValue({ id: 1, total: 40 }) };
+    const mailer = { sendConfirmation: vi.fn().mockResolvedValue(undefined) };
+    const service = new OrderService(repo as any, mailer as any);
+
+    await service.place({ userId: 'u1', items: [{ productId: 'p1', qty: 2 }] });
+
+    expect(mailer.sendConfirmation).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+  });
+});
+```
+
+**Integration test (Supertest + real DB):**
+```ts
+beforeEach(async () => {
+  await db.query('TRUNCATE orders, order_items, products, users RESTART IDENTITY CASCADE');
+});
+
+it('POST /v1/orders → 409 when stock is insufficient', async () => {
+  const user = await seedUser();
+  await db.query("INSERT INTO products (id, name, price, stock) VALUES (1, 'Pen', 20, 1)");
+
+  const res = await request(app)
+    .post('/v1/orders')
+    .set('Authorization', `Bearer ${tokenFor(user)}`)
+    .set('Idempotency-Key', 'test-1')
+    .send({ items: [{ productId: 1, qty: 5 }] })
+    .expect(409);
+
+  expect(res.body.error.code).toBe('OUT_OF_STOCK');
+  const { rows } = await db.query('SELECT stock FROM products WHERE id = 1');
+  expect(rows[0].stock).toBe(1);   // transaction rolled back
+});
+```
+
+**Flaky → fixed:**
+```ts
+// ❌ flaky: depends on real time and a fixed sleep
+await sleep(1000);
+expect(isExpired(token)).toBe(true);
+
+// ✅ deterministic
+vi.useFakeTimers();
+vi.setSystemTime(new Date('2026-10-07T10:00:00Z'));
+const token = issueToken({ ttlSeconds: 60 });
+vi.advanceTimersByTime(61_000);
+expect(isExpired(token)).toBe(true);
+vi.useRealTimers();
+```
+
+---
+
+## 21. Describe your AI-assisted workflow and 2–3 real stories of verifying AI output
+
+**Spoken answer — workflow:**
+"I use AI tools as a fast pair programmer, not an autopilot.
+1. **Plan:** for anything non-trivial I describe the goal, constraints and files, and ask the tool for a plan before code.
+2. **Context:** I point it at an existing example to follow and keep a project instructions file with our conventions and commands.
+3. **Small steps:** one focused change at a time; I read every diff.
+4. **Verify:** type-check, lint and tests must pass; I add tests for new behaviour and check that they actually fail when the code is wrong.
+5. **Review:** I check authorization, validation, SQL safety, error handling and performance, and confirm any library or API it used really exists.
+6. **Ownership:** I don't merge anything I can't explain line by line."
+
+**Where I use it:** scaffolding endpoints from an existing pattern, writing and explaining SQL/aggregation queries, generating edge-case tests, refactoring, explaining unfamiliar code, drafting docs and PR descriptions, first-pass code review.
+
+**Story template (fill with your own real examples):**
+| Part | What to say |
+|---|---|
+| Task | What you asked the tool to build or fix |
+| What it produced | Briefly |
+| What was wrong | The specific bug, risk or bad pattern |
+| How you caught it | Test, review, `EXPLAIN`, docs check, running it |
+| Fix and result | What changed, with a number if possible |
+| Lesson | What you now do differently |
+
+**Sample story 1 — performance:**
+"I asked an agent to add pagination to an orders list. It used `OFFSET` and its tests passed on 10 rows. I ran `EXPLAIN ANALYZE` on a production-size copy and deep pages took over 2 seconds because Postgres still scanned skipped rows. I had it switch to keyset pagination on `(created_at, id)` and added a composite index. p95 dropped to under 20 ms. Now I always test AI-written queries on realistic data volumes."
+
+**Sample story 2 — security:**
+"I asked for an endpoint to fetch a project's documents. The generated code checked that the user was logged in but loaded documents by id alone — an IDOR. I caught it in review because I check authorization first on every endpoint. I scoped the query by the user's region and role and added a test proving another user gets 404. I added 'every query must be scoped by owner or role' to our project instructions."
+
+**Sample story 3 — hallucination:**
+"While integrating a third-party call-tracking webhook, the tool suggested a signature-verification helper from the provider's SDK that doesn't exist. The code didn't compile, so I read the provider's docs, implemented HMAC-SHA256 verification myself with a constant-time comparison, and wrote a test with a known signed payload. Lesson: always verify SDK methods against official docs."
+
+> Replace these with things that actually happened to you — interviewers ask follow-up questions, and real details are what make the story convincing.
+
+---
+
+## 22. Prepare 5 STAR stories
+
+**STAR = Situation (1–2 lines), Task (your goal), Action (what *you* did — the longest part), Result (outcome, ideally with numbers), plus a one-line lesson.** Aim for 1.5–2 minutes per story.
+
+**The 5 stories to prepare, and the questions each one answers:**
+| # | Story theme | Answers questions like |
+|---|---|---|
+| 1 | A feature you built end to end | "Tell me about a project you're proud of", "Walk me through something you built" |
+| 2 | A hard bug or production issue | "Toughest bug?", "Tell me about a failure", "How do you debug?" |
+| 3 | A technical decision with trade-offs | "Tell me about a design decision", "When did you choose between two approaches?" |
+| 4 | Working with others / disagreement | "Conflict with a teammate?", "Handling feedback?", "Working with non-technical people?" |
+| 5 | Learning something new fast / handling ambiguity | "How do you learn?", "Unclear requirements?", "Tight deadline?" |
+
+**Sample 1 — end-to-end feature:**
+- **S:** Operations managers tracked project status updates manually in spreadsheets, and updates were often late or inconsistent.
+- **T:** Build an API so managers could update many projects at once and see a clean status view.
+- **A:** I gathered requirements from two managers, designed the endpoints and validation schema, implemented bulk updates with MongoDB `bulkWrite`, added role checks so managers could only update their own region, wrote integration tests, and added an audit log of who changed what.
+- **R:** A weekly update that took about an hour now takes a few minutes, and status disagreements dropped because every change is traceable.
+- **Lesson:** Talking to users first saved me from building the wrong screen.
+
+**Sample 2 — hard bug:**
+- **S:** A webhook integration occasionally created duplicate call records.
+- **T:** Find the cause and stop the duplicates without losing real events.
+- **A:** I matched duplicate records with request logs and saw the provider retried when our handler took over 5 seconds. I changed the handler to verify the signature, store the event id under a unique constraint, return 200 immediately, and process the event in a background job.
+- **R:** Duplicates went to zero and the endpoint's response time fell from about 5 s to about 50 ms.
+- **Lesson:** Assume every external event can arrive more than once.
+
+**Sample 3 — technical decision:**
+- **S:** We needed scheduled sales reports emailed to managers every morning.
+- **T:** Choose how to run them reliably.
+- **A:** I compared a cron job inside the API process with a separate worker and job queue. The in-process cron would run once per instance (duplicates when scaled) and would slow API requests while generating reports. I chose a queue with a single scheduled job, retries, and a lock so it runs once.
+- **R:** Reports have run on time without duplicates, and API latency wasn't affected.
+- **Lesson:** Explain the trade-off in writing so the team understands the choice.
+
+**Sample 4 — disagreement:**
+- **S:** A teammate wanted to cache a dashboard API response for 1 hour to fix slowness.
+- **T:** I was worried managers would act on stale numbers.
+- **A:** Instead of arguing, I profiled the endpoint and showed that one missing index caused most of the delay. We agreed to add the index and a short 5-minute cache.
+- **R:** Response time went from about 3 s to about 200 ms, and data stayed fresh enough for the team.
+- **Lesson:** Bring data to a disagreement; it turns opinions into a shared decision.
+
+**Sample 5 — learning fast:**
+- **S:** I was asked to integrate an AI calling platform's events into our system, a tool I'd never used.
+- **T:** Deliver a working integration within two weeks.
+- **A:** I read the official docs, built a small test script to see real payloads, used an AI assistant to explain unfamiliar parts and draft code, then verified everything against the docs and wrote tests with recorded sample events.
+- **R:** The integration shipped on time, and I wrote a short guide so others could maintain it.
+- **Lesson:** A small throwaway prototype is the fastest way to learn a new API.
+
+> These samples show the structure. Build your 5 stories from your own real work, college projects, hackathons or internships — use real numbers and be ready for "what would you do differently?".
+
+---
+
+## Last-day revision routine
+
+1. Answer all 22 items out loud, about 2 minutes each (~45 minutes).
+2. Re-read only the ones you hesitated on.
+3. Write the SQL queries in item 8 and the PKCE flow in item 6 from memory.
+4. Draw the notification system design in item 14 on paper.
+5. Say your 5 STAR stories and 2 AI stories once each, timed.
